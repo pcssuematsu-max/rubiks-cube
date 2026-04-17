@@ -347,10 +347,10 @@ class Frame(Tk.Frame):
                   self.cube.invert_moves(self.cube.myperms['BigQD(0)00']),
                   self.cube.invert_moves(self.cube.myperms['BigQE(0)00']),
                   self.cube.invert_moves(self.cube.myperms['BigQF(0)00']),
-                  self.cube.invert_moves(self.cube.myperms['BigQC(0)00']),
-                  self.cube.invert_moves(self.cube.myperms['BigQD(0)00']),
-                  self.cube.invert_moves(self.cube.myperms['BigQE(0)00']),
-                  self.cube.invert_moves(self.cube.myperms['BigQF(0)00']),
+                  self.cube.invert_moves(self.cube.myperms['BigQC(1)00']),
+                  self.cube.invert_moves(self.cube.myperms['BigQD(1)00']),
+                  self.cube.invert_moves(self.cube.myperms['BigQE(1)00']),
+                  self.cube.invert_moves(self.cube.myperms['BigQF(1)00']),
 
                   self.cube.invert_moves(self.cube.myperms['BigRA00']),
                   self.cube.invert_moves(self.cube.myperms['BigRB00']),
@@ -2980,16 +2980,31 @@ class Rubiks_3:
             self.colors = ['R','O','Y','W','G','B']
         
         self.move = {}
+        self._init_move_symbol_tables()
+        self._init_symmetry_tables()
+        self._init_transformation_tables()
 
+        self.move_ops = MoveSequenceOps(self)
+        
+        self._init_myperm_containers()
+        self._register_myperms2()
+        self._expand_registered_myperms()
+
+        self._init_cube_state_and_moves()
+        self._init_color_keys_and_groups()
+        self._init_myperms_index()
+
+    def _init_move_symbol_tables(self):
+        """手の反対面・逆回転・合成結果などの基本表を初期化する。"""
         self.opposite = {"U":"D","D":"U","F":"B","B":"F","L":"R","R":"L","M":"M","S":"S","E":"E","x":"x","y":"y","z":"z"}
-
-
         self.inverse = {" ":"'","'":" ","2":"2"}
         self.mult = {(" "," "):"2",(" ","2"):"'",(" ","'"):0,
                      ("2"," "):"'",("2","2"):0,("2","'"):" ",
                      ("'"," "):0,("'","2"):" ",("'","'"):"2"}
-                     
+        self.axis = {"L":"x","R":"x","M":"x","U":"y","D":"y","E":"y","F":"z","B":"z","S":"z"}
 
+    def _init_symmetry_tables(self):
+        """鏡映・回転・対角反転の move table を初期化する。"""
         self.flip = {}
         self.flip['UD'] = {"U ":"D'","D ":"U'","F ":"F'","B ":"B'","L ":"L'","R ":"R'",
                            "U'":"D ","D'":"U ","F'":"F ","B'":"B ","L'":"L ","R'":"R ",
@@ -3006,7 +3021,6 @@ class Rubiks_3:
                            "M2":"M2","S2":"S2","E2":"E2",
                            "x ":"x'","y ":"y'","z ":"z ","x'":"x ","y'":"y ","z'":"z'",
                            "x2":"x2","y2":"y2","z2":"z2"}
-
 
         self.flip['LR'] = {"U ":"U'","D ":"D'","F ":"F'","B ":"B'","L ":"R'","R ":"L'",
                            "U'":"U ","D'":"D ","F'":"F ","B'":"B ","L'":"R ","R'":"L ",
@@ -3025,7 +3039,6 @@ class Rubiks_3:
                              "x ":"z ","y ":"y ","z ":"x'","x'":"z'","y'":"y'","z'":"x ",
                              "x2":"z2","y2":"y2","z2":"x2"}
 
-
         self.rotate['FB']= {"U ":"R ","D ":"L ","F ":"F ","B ":"B ","L ":"U ","R ":"D ",
                             "U'":"R'","D'":"L'","F'":"F'","B'":"B'","L'":"U'","R'":"D'",
                             "M ":"E'","S ":"S ","E ":"M ","M'":"E ","S'":"S'","E'":"M'",
@@ -3033,7 +3046,6 @@ class Rubiks_3:
                             "M2":"E2","S2":"S2","E2":"M2",
                             "x ":"y'","y ":"x ","z ":"z ","x'":"y ","y'":"x'","z'":"z'",
                             "x2":"y2","y2":"x2","z2":"z2"}
-
 
         self.rotate['LR'] = {"U ":"B ","D ":"F ","F ":"U ","B ":"D ","L ":"L ","R ":"R ",
                              "U'":"B'","D'":"F'","F'":"U'","B'":"D'","L'":"L'","R'":"R'",
@@ -3043,9 +3055,7 @@ class Rubiks_3:
                              "x ":"x ","y ":"z'","z ":"y ","x'":"x'","y'":"z ","z'":"y'",
                              "x2":"x2","y2":"z2","z2":"y2"}
 
-
         self.rotate['RL'] = {self.rotate['LR'][k]:k for k in self.rotate['LR']}
-
 
         self.rotate['120'] = {"U ":"R ","D ":"L ","F ":"U ","B ":"D ","L ":"B ","R ":"F ",
                               "U'":"R'","D'":"L'","F'":"U'","B'":"D'","L'":"B'","R'":"F'",
@@ -3063,7 +3073,6 @@ class Rubiks_3:
                               "x ":"y ","z ":"x ","y ":"z ","x'":"y'","z'":"x'","y'":"z'",
                               "x2":"y2","z2":"x2","y2":"z2"}
 
-
         self.diag_flip = {"U ":"U'","D ":"D'","F ":"R'","B ":"L'","L ":"B'","R ":"F'",
                           "U'":"U ","D'":"D ","F'":"R ","B'":"L ","L'":"B ","R'":"F ",
                           "M ":"S ","S ":"M ","E ":"E'","M'":"S'","S'":"M'","E'":"E ",
@@ -3071,9 +3080,9 @@ class Rubiks_3:
                           "M2":"S2","S2":"M2","E2":"E2",
                           "x ":"z'","z ":"x'","y ":"y'","x'":"z ","z'":"x ","y'":"y ",
                           "x2":"z2","z2":"x2","y2":"y2"}
-                          
 
-
+    def _init_transformation_tables(self):
+        """対称変換の列挙と逆変換表を初期化する。"""
         self.transformation_keys = [(),("UD","FB","LR"),("UD","LR"),("FB",),("FB","LR"),("UD",),("UD","FB"),("LR",),
                                     ('120',),("UD","FB","LR",'120'),("UD","LR",'120'),("FB",'120'),("FB","LR",'120'),("UD",'120'),("UD","FB",'120'),("LR",'120'),
                                     ('240',),("UD","FB","LR",'240'),("UD","LR",'240'),("FB",'240'),("FB","LR",'240'),("UD",'240'),("UD","FB",'240'),("LR",'240'),
@@ -3082,31 +3091,17 @@ class Rubiks_3:
                                     ('240',"XX"),("UD","FB","LR",'240',"XX"),("UD","LR",'240',"XX"),("FB",'240',"XX"),("FB","LR",'240',"XX"),("UD",'240',"XX"),("UD","FB",'240',"XX"),("LR",'240',"XX"),
                                     ]
 
-        
-
         if self.size >= 6:
             self.transformation_keys = [x + y for y in [(),('S',)] for x in self.transformation_keys]
 
-
         self.tf_invert = {"UD":"UD","FB":"FB","LR":"LR","120":"240","240":"120","XX":"XX","S":"S"}
-
-        self.move_ops = MoveSequenceOps(self)
-
-        self.axis = {"L":"x","R":"x","M":"x","U":"y","D":"y","E":"y","F":"z","B":"z","S":"z"}
-        
-        self._init_myperm_containers()
-        self._register_myperms2()
-        self._expand_registered_myperms()
-
-        self._init_cube_state_and_moves()
-        self._init_color_keys_and_groups()
-        self._init_myperms_index()
 
     def _init_myperm_containers(self):
         """myperm登録用の辞書とグループ情報を初期化する。"""
         self.myperms = {}
         self.myperms2 = {}
         self.Group_Nums = Group_Nums[self.size]
+
 
     def _register_myperms2(self):
         """myperms2へ固定手順と派生手順を登録する。"""
@@ -3118,6 +3113,10 @@ class Rubiks_3:
 
     def _register_myperms2_base(self):
         """基本パターンと大分類の手順を登録する。"""
+        # 命名メモ:
+        # - SingleMove-* は1手だけ回す補助手順。
+        # - X-Center / Plus-Center / Oblique-Center は動かす center の配置族。
+        # - 4 / 6 は見た目上で動く center 数、末尾の英字は variant を表す。
         self.myperms2['Rotate-A'] = (" x ",)
         self.myperms2['Rotate-B'] = (" x2",)
         self.myperms2['Rotate-C'] = (" x "," y ")
@@ -3183,6 +3182,10 @@ class Rubiks_3:
 
     def _register_myperms2_x_perms(self):
         """ParitySwap系とその派生手順を登録する。"""
+        # 命名メモ:
+        # - ParitySwap-* は corner 2つ + midedge 2つの同時 swap。
+        # - ParityCycle-* は corner 4つ + edge 2つの置換。
+        # - A/B/F/J/K は corner 配置 family、末尾番号は family 内 variant。
         if self.size <= 3:
             PLLParity = ()
         elif self.size <= 5:
@@ -3277,6 +3280,10 @@ class Rubiks_3:
 
     def _register_myperms2_odd_size(self):
         """奇数サイズで使うQ/P/R系の手順を登録する。"""
+        # 命名メモ:
+        # - CenterMidEdgeSwap-* は center 4つの cycle と midedge 2つの swap。
+        # - CenterCornerSwap-* は center 4つの cycle と corner 2つの swap。
+        # - Q/P/R は配置 family、末尾の英字や番号は向き違い・variant。
         if self.size % 2 == 1:
             self.myperms2['CenterMidEdgeSwap-QA'] = (' S ', ' D ', ' S ', " D'", ' S ', " D'", ' S ', ' D ', ' S2', " D'", ' S ', ' D2', ' L2', " S'", " D'", " S'", ' D ', ' L2', " D'")
             self.myperms2['CenterMidEdgeSwap-QB'] = (' S ', " D'", ' S ', ' D2', ' L2', " D'", ' S ', " D'", ' S ', ' D2', ' L2', " D'", ' S ')
@@ -3331,6 +3338,7 @@ class Rubiks_3:
         self._register_myperms2_classic_perms()
         self._register_myperms2_midedge_general()
         self._register_myperms2_edge_general()
+        self._register_myperms2_center_general()
 
     def _register_myperms2_classic_perms(self):
         """小サイズで使うPLL系の基本手順を登録する。"""
@@ -3350,6 +3358,11 @@ class Rubiks_3:
 
     def _register_myperms2_midedge_general(self):
         """奇数サイズ向けのMidEdge系手順を登録する。"""
+        # 命名メモ:
+        # - MidEdge3-* は midedge 3個の cycle。
+        # - MidEdge4-* は midedge 4個の cycle / 2-2 swap 型。
+        # - family 文字は位置関係、末尾 A/B/C... は向き違い。
+        # - MidEdgeFlip2/4-* は midedge の flip 用 family。
         if self.size % 2 == 1:           
             self.myperms2['MidEdge3-I-A'] = (' M ', ' D2', " M'", ' D2')
             self.myperms2['MidEdge3-I-B'] = (" U'", " M'", ' U ', ' F2', " U'", ' M ', ' U ', ' F2')
@@ -3513,6 +3526,13 @@ class Rubiks_3:
 
     def _register_myperms2_edge_general(self):
         """4x4以上で使うEdge系・派生手順を登録する。"""
+        # 命名メモ:
+        # - Wing3Cycle-* は wing 3個の cycle。
+        # - Parallel3 / MidEdge3 / Parallel2Plus1 / SameEdgePairPlus1 は
+        #   3つの wing の位置関係 family。
+        # - WingSwapParallel / WingSwapSkew / WingSwapSkewViaEdge は
+        #   wing 2点交換 family。
+        # - CornerEdgeBlockSwap-* は corner 2つ + edge block 2つの同時 swap。
         if self.size >= 4:
             
 
@@ -3707,355 +3727,6 @@ class Rubiks_3:
             self.myperms2['Wing3-SameEdgePairPlus1-K06-'] = ('2R2', ' F ', "2D'", ' B ', '2D ', " F'", "2D'", " B'", '2D ', '2R2')
             self.myperms2['Wing3-SameEdgePairPlus1-K07-'] = ('2R2', " F'", "2U'", " B'", '2U ', ' F ', "2U'", ' B ', '2U ', '2R2')
 
-            
-            self.myperms2['L2NA-'] = ('2F2', ' R2', "2F'", ' U2', "2F'", ' U2', ' R2', "2F'", ' R2', '2F ', ' R2', "2F'", ' R2', '2F2', ' R2')
-            self.myperms2['L2NA1-'] = ('2B2', ' D2', '2F ', ' U2', '2B ', ' L2', "2F'", ' L2', ' U2', "2B'", ' R2', '2F ', ' R2', ' D2', '2B2')
-            self.myperms2['L2NA2-'] = ('2B2', ' D2', ' R2', "2F'", ' R2', '2B ', ' U2', ' L2', '2F ', ' L2', "2B'", ' U2', "2F'", ' D2', '2B2')
-            self.myperms2['L2OA-'] = ('2B2', ' U2', "2B'", ' U2', ' D2', '2F ', ' D2', ' U2', "2B'", ' U2', '2B2')
-            self.myperms2['L2ZA-'] = ("2F'", ' U2', "2F'", ' U2', ' R2', "2F'", ' R2', "2F'", ' L2', '2B2', ' L2', '2F ', ' U2', '2F2', ' U2')
-
-            self.myperms2['L2E-NB0-'] = ('2F ', " D'", '2L ', ' D ', ' R2', " D'", "2L'", ' D ', ' R2', '2F ', ' D ', '2R2', " D'", ' R2', ' D ', '2R2', ' D ', '2F ', ' D2', '2F2', ' R2', '2B ', ' U2', '2F2', ' U2', ' R2', "2B'", ' R2')
-            self.myperms2['L2E-OB0-'] = (" R "," B ","2R'"," U2","2R'"," U2"," B2","2R'"," B2","2R'"," F2","2L2"," F2","2R "," U2","2R2"," U2"," B'"," R'")
-            self.myperms2['L2E-ZB0-'] = (" R "," B ","2R2"," U2","2R "," U2"," D2","2L'"," U2"," D2","2R "," U2","2R2"," B'"," R'")
-            self.myperms2['L2E-ZB1-'] = self.invert_moves(self.myperms2['L2E-ZB0-'])
-            self.myperms2['L2E-OB1-'] = self.invert_moves(self.myperms2['L2E-OB0-'])
-
-
-            self.myperms2['L2E-NC0-'] = ('2B ', " U'", '2R ', ' U ', ' L2', " U'", "2R'", ' U ', ' L2', '2B ', ' U ', "2L'", " U'", ' R2', ' U ', '2L ', ' U ', "2B'", ' U2', '2B2', ' R2', '2B ', ' U2', '2B2', ' U2', ' R2', '2B ', ' R2')
-            self.myperms2['L2E-ZC0-'] = (" U'", '2L ', ' F2', '2L ', ' F2', ' U2', '2L ', ' U2', '2L ', ' D2', '2R2', ' D2', "2L'", ' F2', '2L2', ' F2', ' U ')
-            self.myperms2['L2E-OC0-'] = (" U'", '2L2', ' F2', "2L'", ' F2', ' B2', '2R ', ' F2', ' B2', "2L'", ' F2', '2L2', ' U ')
-            self.myperms2['L2E-OC1-'] = self.invert_moves(self.myperms2['L2E-OC0-'])            
-            self.myperms2['L2E-ZC1-'] = self.invert_moves(self.myperms2['L2E-ZC0-'])
-
-
-            self.myperms2['L2ND-'] = ('2F2', ' D2', '2F ', ' D2', "2F'", ' D2', '2F ', ' D2', ' R2', '2F ', ' R2', '2F ', ' D2', '2F2', ' D2')
-            self.myperms2['L2OD-'] = ('2B2', ' U2', "2B'", ' U2', '2B ', ' U2', "2B'", ' U2', "2B'", ' U2', '2B ', ' L2', "2B'", ' L2', '2B ', ' U2')
-            self.myperms2['L2ZD-'] = (' R2', '2B ', ' D2', "2B'", ' D2', ' R2', '2B ', ' L2', '2B ', ' L2', '2B ', ' L2', '2B2', ' L2')
-
-
-            
-            self.myperms2['L2XA-'] = ('2B2', ' L2', ' U2', '2B2', ' U2', ' L2', '2B2')
-            self.myperms2['L2XA1-'] = ('2B2', ' R2', ' D2', '2F2', ' D2', ' R2', '2B2')
-            self.myperms2['L2FA-'] = ('2B ', ' L2', '2F2', ' D2', '2F ', ' D2', '2F ', ' L2', '2B2', ' U2', '2B ', ' U2')
-            self.myperms2['L2FA1-'] = ('2B ', ' L2', '2F2', ' D2', '2F ', ' D2', "2B'", ' L2', '2F2', ' U2', "2F'", ' U2')
-            self.myperms2['L2HA-'] = (" R2",'2F ', ' R2', '2B ', ' R2', ' L2', '2F ', "2B'", ' L2', ' R2', '2B ', ' R2', '2B '," R2")
-
-            self.myperms2['L2HD-'] = (' L2', '2B2', ' L2', ' U2', '2B2', ' U2', ' L2', '2B2', ' L2')
-            self.myperms2['L2FD-'] = (" L2","2B "," L2","2F2"," D2","2F "," D2","2F "," L2","2B2"," U2","2B "," U2"," L2")
-            self.myperms2['L2FD1-'] = (' U2', '2F ', ' U2', '2B2', ' R2', '2B ', ' R2', "2F'", ' U2', '2B2', ' L2', "2B'", ' L2', ' U2')
-            self.myperms2['L2XD-'] = ('2F ', ' U2', '2B ', ' U2', ' D2', '2F ', "2B'", ' D2', ' U2', '2B ', ' U2', '2B ')
-
-
-            self.myperms2['L2E-HB0-'] = ("2R'", ' F2', " D'", '2F2', ' D ', ' F2', " D'", '2F2', ' D ', ' F2', ' D ', "2B'", " D'", ' F2', ' D ', '2B ', " D'", '2R ')
-
-
-            self.myperms2['L2E-XB0-'] = ("2R'", ' F2', ' D ', "2B'", " D'", ' F2', ' D ', '2B ', " D'", ' F2', " D'", '2F2', ' D ', ' F2', " D'", '2F2', ' D ', '2R ')
-          
-            self.myperms2['L2E-FB0-'] = (" R "," B ","2L "," F2","2R2"," D2","2R "," D2","2R "," F2","2L2"," U2","2L "," U2"," B'"," R'")
-
-            self.myperms2['L2E-XC0-'] = ('2R ', ' F2', ' D ', '2F2', " D'", ' F2', ' D ', '2F2', " D'", ' F2', " D'", '2B ', ' D ', ' F2', " D'", "2B'", ' D ', "2R'")
-
-            self.myperms2['L2E-HC0-'] = ('2R ', ' F2', " D'", '2B ', ' D ', ' F2', " D'", "2B'", ' D ', ' F2', ' D ', '2F2', " D'", ' F2', ' D ', '2F2', " D'", "2R'")
-   
-            self.myperms2['L2E-FC0-'] = (" U'", "2R'", ' D2', '2L2', ' B2', "2L'", ' B2', "2L'", ' D2', '2R2', ' F2', "2R'", ' F2', ' U ')
-            self.myperms2['L2E-FC1-'] = self.invert_moves(self.myperms2['L2E-FC0-'])
-
-            self.myperms2['Edge6A'] = ("2L ", "2R'", " D2", "2L'", "2R ", " D2")
-            self.myperms2['Edge6B'] = (" U'", "2L'", "2R ", ' U ', ' F2', " U'", "2L ", "2R'", ' U ', ' F2')
-            self.myperms2['Edge6C'] = (" F'", "2U ", "2D'", " F'", ' D2', ' F ', "2U'", "2D ", " F'", ' D2', ' F2')
-            self.myperms2['Edge6D'] = (' D2', " B'", "2L ", "2R'", ' B ', ' D2', " B'", "2L'", "2R ", ' B ')            
-            self.myperms2['Edge6E'] = ('2L2', ' B2', "2R'", ' F2', "2L'", ' U2', '2R ', ' U2', ' F2', '2L ', ' D2', "2R'", '2L2', ' D2', ' B2', '2L2')
-            self.myperms2['Edge6F'] = ('2L2', ' F2', '2L ', ' D2', '2L ', ' D2', ' F2', '2L ', ' F2', "2L'", ' F2', '2L ', ' D2', '2L2', ' D2', ' F2', '2L2', ' F2')
-            self.myperms2['Edge6G'] = ('2R ', ' F2', "2R'", '2L ', ' F2', ' U2', ' B2', '2R ', ' B2', ' U2', '2R2', ' D2', '2R ', ' F2', "2L'", ' U2', '2R ', ' U2', ' F2', '2L ', ' D2', '2R ')
-            self.myperms2['Edge6H'] = ('2L ', "2R'", ' D2', '2R ', "2L'", ' D2', '2L2', ' B2', "2R'", ' F2', '2L ', ' F2', ' U2', '2L ', ' U2', "2L'", ' U2', '2R ', ' U2', ' B2', '2L2')
-            
-            self.myperms2['Edge6PAX'] = (" U'", "2L ", "2R'", ' U ', ' F2', " U'", "2L'", "2R ", ' U ', ' F2') + ("2R2"," U2"," F2","2R2"," F2"," U2","2R2")
-            self.myperms2['Edge6PBX'] = (" U'", "2L2", "2R2", ' U ', ' F2', " U'", "2L2", "2R2", ' U ', ' F2') + ("2R2"," U2"," F2","2R2"," F2"," U2","2R2")
-            self.myperms2['Edge6PCX'] = (' D2', " B'", "2L'", "2R ", ' B ', ' D2', " B'", "2L ", "2R'", ' B ') + ("2R2"," F2"," D2","2R2"," D2"," F2","2R2")
-            self.myperms2['Edge6PDX'] = (' D2', " B'", "2L2", "2R2", ' B ', ' D2', " B'", "2L2", "2R2", ' B ') + ("2R2"," F2"," D2","2R2"," D2"," F2","2R2")
-        
-            self.myperms2['Edge6PAN'] = (" U'", "2L ", "2R'", ' U ', ' F2', " U'", "2L'", "2R ", ' U ', ' F2') + ('2R2', ' U2', "2R'", ' F2', "2R'", ' F2', ' U2', "2R'", ' U2', '2R ', ' U2', "2R'", ' U2', '2R2', ' U2')
-            self.myperms2['Edge6PBN'] = (" U'", "2L2", "2R2", ' U ', ' F2', " U'", "2L2", "2R2", ' U ', ' F2') + ('2R2', ' U2', "2R'", ' F2', "2R'", ' F2', ' U2', "2R'", ' U2', '2R ', ' U2', "2R'", ' U2', '2R2', ' U2')
-            self.myperms2['Edge6PCN'] = (' D2', " B'", "2L'", "2R ", ' B ', ' D2', " B'", "2L ", "2R'", ' B ') + ('2R2', ' F2', "2R'", ' D2', "2R'", ' D2', ' F2', "2R'", ' F2', '2R ', ' F2', "2R'", ' F2', '2R2', ' F2')
-            self.myperms2['Edge6PDN'] = (' D2', " B'", "2L2", "2R2", ' B ', ' D2', " B'", "2L2", "2R2", ' B ') + ('2R2', ' F2', "2R'", ' D2', "2R'", ' D2', ' F2', "2R'", ' F2', '2R ', ' F2', "2R'", ' F2', '2R2', ' F2')
-
-
-            self.myperms2['EdgePK-A00-'] = ("2F'", ' L ', '2D ', " L'", ' U2', ' L ', "2D'", " L'", ' U2', '2F ')
-            self.myperms2['EdgePK-A01-'] = ("2F'", ' U2', ' L ', '2D ', " L'", ' U2', ' L ', "2D'", " L'", '2F ')
-            self.myperms2['EdgePK-A02-'] = ("2F'", " L'", '2U ', ' L ', ' U2', " L'", "2U'", ' L ', ' U2', '2F ')
-            self.myperms2['EdgePK-A03-'] = ("2F'", ' U2', " L'", '2U ', ' L ', ' U2', " L'", "2U'", ' L ', '2F ')
-            self.myperms2['EdgePK-A04-'] = ('2F2', ' R2', " D'", "2L'", ' D ', ' R2', " D'", '2L ', ' D ', '2F2')
-            self.myperms2['EdgePK-A05-'] = ('2F2', " D'", "2L'", ' D ', ' R2', " D'", '2L ', ' D ', ' R2', '2F2')
-            self.myperms2['EdgePK-A06-'] = ('2F2', ' R2', ' D ', "2R'", " D'", ' R2', ' D ', '2R ', " D'", '2F2')
-            self.myperms2['EdgePK-A07-'] = ('2F2', ' D ', "2R'", " D'", ' R2', ' D ', '2R ', " D'", ' R2', '2F2')
-            self.myperms2['EdgePK-A08-'] = ('2B2', ' R2', ' D ', '2L ', " D'", ' R2', ' D ', "2L'", " D'", '2B2')
-            self.myperms2['EdgePK-A09-'] = ('2B2', ' D ', '2L ', " D'", ' R2', ' D ', "2L'", " D'", ' R2', '2B2')
-                        
-            self.myperms2['EdgePK-D00-'] = (" L2","2F'", ' L ', '2D ', " L'", ' U2', ' L ', "2D'", " L'", ' U2', '2F '," L2")
-            self.myperms2['EdgePK-D01-'] = (" L2","2F'", ' U2', ' L ', '2D ', " L'", ' U2', ' L ', "2D'", " L'", '2F '," L2")
-            self.myperms2['EdgePK-D02-'] = (" L2","2F'", " L'", '2U ', ' L ', ' U2', " L'", "2U'", ' L ', ' U2', '2F '," L2")
-            self.myperms2['EdgePK-D03-'] = (" L2","2F'", ' U2', " L'", '2U ', ' L ', ' U2', " L'", "2U'", ' L ', '2F '," L2")
-            self.myperms2['EdgePK-D04-'] = (" R2",'2F2', ' R2', " D'", "2L'", ' D ', ' R2', " D'", '2L ', ' D ', '2F2'," R2")
-            self.myperms2['EdgePK-D05-'] = (" R2",'2F2', " D'", "2L'", ' D ', ' R2', " D'", '2L ', ' D ', ' R2', '2F2'," R2")
-            self.myperms2['EdgePK-D06-'] = (" R2",'2F2', ' R2', ' D ', "2R'", " D'", ' R2', ' D ', '2R ', " D'", '2F2'," R2")
-            self.myperms2['EdgePK-D07-'] = (" R2",'2F2', ' D ', "2R'", " D'", ' R2', ' D ', '2R ', " D'", ' R2', '2F2'," R2")
-            self.myperms2['EdgePK-D08-'] = (" R2",'2B2', ' R2', ' D ', '2L ', " D'", ' R2', ' D ', "2L'", " D'", '2B2'," R2")
-            self.myperms2['EdgePK-D09-'] = (" R2",'2B2', ' D ', '2L ', " D'", ' R2', ' D ', "2L'", " D'", ' R2', '2B2'," R2")
-
-
-
-
-            self.myperms2['SideLA-'] = ('2L ', ' U2', "2R'", ' F2', '2R ', ' F2', ' U2', ' B2', "2R'", ' D2', '2R2', ' D2', "2R'", ' B2')
-            self.myperms2['SideLB-'] = self.invert_moves(self.myperms2['SideLA-'])
-            self.myperms2['SideLC-'] = ('2L ', ' F2', '2L ', ' F2', '2L ', ' F2', '2L2', ' B2', "2L'", ' F2', '2L ', ' B2')
-            self.myperms2['SideLD-'] = self.invert_moves(self.myperms2['SideLC-'])
-            self.myperms2['SideLE-'] = ("2R'", ' B2', ' U2', '2R ', ' U2', "2R'", ' U2', '2R2', '2L ', ' U2', "2L'", ' B2', '2R2')
-            self.myperms2['SideLF-'] = self.invert_moves(self.myperms2['SideLE-'])
-
-            self.myperms2['SideLG-'] = (' F2', ' U2', ' F ', "2U'", " F'", ' U2', ' F ', '2U2', ' F ', ' U2', " F'", "2U'", ' F ', ' U2')
-            self.myperms2['SideLH-'] = ('2R2', ' B2', "2R'", ' B2', "2R'", ' U2', '2L2', ' F2', "2L'", ' F2', "2L'", ' U2')
-            self.myperms2['SideLI-'] = ('2R ', ' B2', "2L'", ' B2', '2L2', ' F2', "2L'", ' U2', '2L ', ' U2', '2L ', ' F2', '2L2', ' U2', "2R'", ' U2')
-
-            self.myperms2['SideRA-'] = (" F2",'2L2', ' F2', '2L ', ' B2', "2L'", ' B2', ' F2', ' U2', "2L'", ' U2', '2R ', ' B2', "2R'", ' B2', '2L2'," F2")
-            self.myperms2['SideRB-'] = self.invert_moves(self.myperms2['SideRA-'])
-            self.myperms2['SideRC-'] = ('2L ', ' B2', '2L ', ' B2', ' D2', '2L ', '2R ', ' D2', "2R'", ' D2', "2L'", ' D2', "2L'")
-            self.myperms2['SideRD-'] = self.invert_moves(self.myperms2['SideRC-'])
-            self.myperms2['SideRE-'] = ('2L2', ' U2', "2L'", ' U2', "2L'", "2R'", ' D2', ' B2', '2R ', ' B2', ' D2', '2R ')
-            self.myperms2['SideRF-'] = self.invert_moves(self.myperms2['SideRE-'])
-
-            self.myperms2['SideRG-'] = ('2L2', ' D2', '2L ', ' B2', "2L'", ' B2', "2L'", ' D2', '2L2', ' B2', '2R ', ' B2', "2R'", ' U2', '2L ', ' U2')
-            self.myperms2['SideRH-'] = ("2R'", ' B2', '2R2', ' F2', "2R'", ' D2', '2R ', ' D2', '2R ', ' F2', '2R2', ' D2', "2L'", ' D2', '2L ', ' B2')
-            self.myperms2['SideRI-'] = ("2L'", ' U2', '2L ', ' U2', '2L ', ' F2', '2L2', ' U2', "2R'", ' U2', '2R ', ' B2', "2L'", ' B2', '2L2', ' F2')
-
-
-            self.myperms2['SideSA-'] = (" U2",'2L ', ' U2', "2R'", ' F2', '2R ', ' F2', ' U2', ' B2', "2R'", ' D2', '2R2', ' D2', "2R'", ' B2'," U2")
-            self.myperms2['SideSB-'] = (" U2",'2L ', ' F2', '2L ', ' F2', '2L ', ' F2', '2L2', ' B2', "2L'", ' F2', '2L ', ' B2'," U2")
-            self.myperms2['SideSC-'] = ("2R'", ' U2', "2R'", ' U2', "2R'", ' F2', ' D2', ' B2', '2L ', ' B2', ' D2', ' F2', "2R'")
-            self.myperms2['SideSD-'] = self.invert_moves(self.myperms2['SideSC-'])
-
-            self.myperms2['SideSE-'] = ("2L'", ' B2', "2R'", ' B2', ' D2', "2R'", ' D2', '2R ', ' D2', "2L'", ' D2', ' F2', "2R'", ' F2', '2R ', ' U2', "2L'", ' U2', ' F2', "2L'", ' F2', "2L'")
-            self.myperms2['SideSF-'] = ('2L ', ' F2', '2L ', ' F2', '2L2', ' U2', '2R ', ' B2', '2R ', ' B2', '2R2', ' U2')
-            self.myperms2['SideSG-'] = ('2L ', ' F2', '2R2', ' U2', "2R'", ' F2', "2R'", ' F2', '2R ', ' U2', '2R2', ' D2', '2R ', ' D2', "2L'", ' F2')
-
-            self.myperms2['SideTA-'] = ('2L2', ' F2', '2L ', ' B2', "2L'", ' B2', ' F2', ' U2', "2L'", ' U2', '2R ', ' B2', "2R'", ' B2', '2L2')
-            self.myperms2['SideTB-'] = ('2R2', ' D2', "2R'", ' B2', '2R2', ' B2', ' D2', ' B2', '2R ', ' B2', ' D2', '2R ', ' D2')
-            self.myperms2['SideTC-'] = self.invert_moves(self.myperms2['SideTB-'])
-
-            self.myperms2['SideTD-'] = ('2R ', ' B2', "2R'", ' B2', "2R'", ' U2', '2L2', ' F2', "2L'", ' F2', "2L'", ' U2',"2R ")
-            self.myperms2['SideTE-'] = ('2R2', ' D2', '2L ', ' D2', "2L'", ' F2', '2L2', ' F2', '2L ', ' D2', "2L'", ' D2', '2R2')
-            
-            self.myperms2['SideKKA-'] = ("2R "," U2","2R "," U2","2R "," U2","2R "," U2","2R ")
-            self.myperms2['SideKKB-'] = ("2L'", ' D2', "2L'", ' D2', '2L ', ' B2', '2L2', ' D2', "2L'", ' D2', "2L'", ' B2')
-            self.myperms2['SideKKC-'] = ('2R ', ' U2', '2R ', ' U2', '2R2', ' B2', "2R'", ' U2', '2R ', ' U2', '2R ', ' B2')
-
-            self.myperms2['SideKKD-'] = (' U2', '2R ', ' U2', ' F2', ' B2', ' D2', '2L ', ' D2', ' B2', ' F2')
-            self.myperms2['SideKKE-'] = (" D'", "2F'", ' D ', ' B2', " D'", '2F ', ' D ', " U'", "2F'", ' U ', ' B2', " U'", '2F ', ' U ')
-            self.myperms2['SideKKF-'] = (' F2', "2L'", ' B2', '2L ', ' F2', "2L'", ' B2', '2L ', '2R ', ' F2', "2R'", ' B2', '2R ', ' F2', "2R'", ' B2')
-            
-            self.myperms2['SideJJA-'] = ('2R2', ' U2', '2L ', ' U2', "2L'", ' B2', '2R ', ' B2', ' U2', '2R2', ' D2', "2R'", ' U2', '2R ', ' D2')
-            self.myperms2['SideJJB-'] = ("2R'", ' U2', ' D2', "2R'", ' U2', "2R ", ' D2', '2R2', ' U2', "2R'", ' U2', "2R'")
-            self.myperms2['SideJJC-'] = self.invert_moves(self.myperms2['SideJJB-'])
-
-            self.myperms2['SideJJD-'] = ('2L ', ' D2', '2L ', ' D2', '2L ', ' B2', '2R2', ' U2', '2R ', ' U2', '2R ', ' B2', '2L ')
-            self.myperms2['SideJJE-'] = ("2R'", ' U2', ' D2', "2R'", ' U2', '2R ', ' D2', '2R2', ' U2', "2R'", ' U2', '2R2', ' U2', ' D2', "2R'", ' U2', '2R ', ' D2', '2R2', ' U2', "2R'", ' U2', "2R'")
-            
-            self.myperms2['SideIIA-'] = (" U2","2R "," U2","2R "," U2","2R "," U2","2R "," U2","2R "," U2")
-            self.myperms2['SideIIB-'] = (' U2', '2R ', ' U2', '2R ', ' U2', '2R ', ' U2', '2R ', ' U2', '2R ', "2L'", ' U2', '2L ', ' F2', ' U2', '2R ', ' U2', "2R'", ' F2')
-
-            self.myperms2['SideIIC-'] = ("2R'", ' B2', ' U2', ' D2', ' F2', "2L'", ' F2', ' D2', ' U2', ' B2')
-            self.myperms2['SideIID-'] = ('2L2', ' B2', "2R'", ' B2', '2R ', ' D2', "2L'", ' D2', ' B2', "2L'", ' B2', ' F2', '2L ', ' F2', ' U2', '2L ', ' U2', "2R'", ' F2', '2R ', ' F2', '2L2')
-            
-            self.myperms2['SideSSA-'] = ('2R ', ' U2', '2R2', ' B2', "2R'", ' B2', '2R2', ' F2', ' D2', '2L ', ' D2', ' F2', ' U2')
-            self.myperms2['SideSSB-'] = (' F2', '2R ', ' F2', '2L ', ' D2', "2L'", ' D2', "2R'", ' F2', '2L ', ' F2', "2L'", ' U2', '2R ', ' U2')
-
-            self.myperms2['SideSSC-'] = self.myperms2['SideSSA-'] * 2
-            self.myperms2['SideSSD-'] = ('2R2', ' U2', ' B2', '2R ', "2L'", ' B2', "2R'", '2L ', ' B2', '2R2', ' B2', ' U2')
-            
-
-            self.myperms2['CenterPXA-'] = ("2R2","2F2","2R2","2F2")
-            self.myperms2['CenterPXB-'] = (" U ","2R2","2F2","2R2","2F2"," U'")
-            self.myperms2['CenterPXC-'] = (" U2","2R2","2F2","2R2","2F2"," U2")
-            self.myperms2['CenterPWA-'] = ('2F2', " D'", '2R2', '2F2', '2R2', '2F2', ' D ', '2F2')
-            self.myperms2['CenterPWB-'] = ('2B2', " D'", '2L2', '2B2', '2L2', '2B2', ' D ', '2B2')
-            self.myperms2['CenterPWC-'] = ('2F2', ' U ', '2L2', '2F2', '2L2', '2F2', " U'", '2F2')
-            self.myperms2['CenterPWD-'] = ('2B2', ' U ', '2R2', '2B2', '2R2', '2B2', " U'", '2B2') 
-            self.myperms2['CenterPVA-'] = ("2F'", '2U ', '2F ', "2U'", '2F ', "2R'", "2F'", '2R ')
-            self.myperms2['CenterPVB-'] = ("2F'", '2U ', "2F'", "2U'", '2F ', "2R'", '2F ', '2R ')
-            self.myperms2['CenterPVC-'] = ("2R'", '2F ', '2R ', "2F'", '2U ', "2F'", "2U'", '2F ')
-            self.myperms2['CenterPUA-'] = ('2F2', ' U ', '2R2', " U'", '2R2', '2F2', '2R2', ' U ', '2R2', " U'")
-            self.myperms2['CenterPUB-'] = ('2R2', '2F2', '2R2', '2F2', ' U2', '2R2', '2F2', '2R2', '2F2', ' U2')
-
-
-            
-
-            self.myperms2['CenterP8-'] = ("2U2","2R2","2U'","2R2","2U'","2R2","2U'","2R2","2U ")      
-            
-            self.myperms2['CenterP6A-'] = ("2R ","2U ","2R'","2U'")
-            self.myperms2['CenterP6B-'] = ("2R ","2U'","2R'","2U ")
-            self.myperms2['CenterP6C-'] = ("2R ","2U2","2R'","2U2")
-            self.myperms2['CenterP6D-'] = ("2R2","2U'","2R2","2U ")
-            self.myperms2['CenterP6E-'] = ("2U'","2R ","2U ","2R2","2F ","2R ","2F'")
-            self.myperms2['CenterP6F-'] = ('2B ', '2D2', '2B ', '2D2', "2L'", "2B'", '2L ', '2U ', "2B'", "2U'")
-            self.myperms2['CenterP6G-'] = ("2R ","2U ","2R ","2U'","2R2")
-            self.myperms2['CenterP6H-'] = ("2R ","2U'","2R ","2U ","2R2")
-            self.myperms2['CenterP6I-'] = ("2R2","2U ","2R'","2U'","2R'")
-            self.myperms2['CenterP6J-'] = ("2R2","2U'","2R'","2U ","2R'")
-            self.myperms2['CenterP6K-'] = ("2R2","2U ","2R2","2U ","2R2","2U2","2R2")
-            self.myperms2['CenterP6L-'] = ("2R2","2U2","2R2","2U ","2R2","2U ","2R2")
-            self.myperms2['CenterP6M-'] = ("2U ","2R2","2U2","2R2","2U ")
-            self.myperms2['CenterP6N-'] = ("2F ","2R ","2F2","2R'","2F ")
-            self.myperms2['CenterP6O-'] = ("2F'","2R ","2F2","2R'","2F'")
-
-            
-
-            self.myperms2['CenterP4A-'] = ("2R2","2U2","2R'","2U2","2R'")
-            self.myperms2['CenterP4B-'] = ("2R ","2U2","2R ","2U2","2R2")
-            self.myperms2['CenterP4C-'] = ("2U ","2F ","2R ","2F'","2R'","2U'")
-            self.myperms2['CenterP4D-'] = ('2F ', "2D'", '2F2', '2D ', "2F'", '2R2', '2F2', '2R2')
-            self.myperms2['CenterP4D(1)-'] = ("2D'", "2F'", '2D2', '2F2', '2L ', "2F'", "2L'", "2D'")
-            self.myperms2['CenterP4D(2)-'] = ("2F'", '2D2', "2B'", '2D2', '2F ', '2D ', '2B ', "2D'")
-            self.myperms2['CenterP4D(3)-'] = ("2D'", "2F'", '2D ', "2F'", '2R2', '2F ', '2R2', '2F ')
-            self.myperms2['CenterP4D(4)-'] = ('2F ', "2L'", "2F'", '2L ', "2F'", "2D'", '2F ', '2D ')
-            self.myperms2['CenterP4XA-'] = ("2L'"," U ","2R'","2D2","2R "," U'","2D2","2L ")
-            self.myperms2['CenterP4XB-'] = ("2L'"," D'","2R'","2D2","2R "," D ","2D2","2L ")
-            self.myperms2['CenterP4YA-'] = ("2B "," U'","2R ","2U ","2R'"," U ","2U'","2B'")
-            self.myperms2['CenterP4YB-'] = ("2B "," D ","2R ","2U ","2R'"," D'","2U'","2B'")
-            self.myperms2['CenterP4YC-'] = (' D2', '2L ', '2U2', '2L ', '2U2', '2L2', ' D2')
-            self.myperms2['CenterP4YD-'] = (' U2', '2L ', '2U2', '2L ', '2U2', '2L2', ' U2')
-            self.myperms2['CenterP4ZA-'] = (" U2","2R ","2U2","2R'"," U2","2R2","2U2","2R2")
-            self.myperms2['CenterP4ZB-'] = (" D2","2R ","2U2","2R'"," D2","2R2","2U2","2R2")
-            self.myperms2['CenterP4ZC-'] = (' U2', '2R ', '2U2', "2R'", ' U2', '2L2', '2U2', '2L2')
-            self.myperms2['CenterP4ZD-'] = (' D2', '2R ', '2U2', "2R'", ' D2', '2L2', '2U2', '2L2')
-            self.myperms2['CenterP4WA-'] = ('2L ', '2U2', ' D ', '2R ', '2U2', "2R'", " D'", "2L'")
-            self.myperms2['CenterP4WB-'] = ('2L ', '2U2', " U'", '2R ', '2U2', "2R'", " U ", "2L'")
-
-            
-
-
-
-            
-            self.myperms2['BigCenter-AOpp-'] = ('2L2', '2R2', '2F2', '2R2', '2L2', '2F2')
-            self.myperms2['BigCenter-ANbr-'] = ("2R "," U ","2L'"," U'","2R'"," U ","2L "," U2","2R "," U ","2L'"," U'","2R'"," U ","2L2",
-                                               " F ","2R'"," F'","2L'"," F ","2R "," F2","2L "," F ","2R'"," F'","2L'"," F ","2R ")
-
-
-
-
-            self.myperms2['BigCenter-ACyc3-'] = self.myperms2['BigCenter-ANbr-'] + self.transform(self.myperms2['BigCenter-ANbr-'],1)
-            self.myperms2['BigCenter-ACyc4-'] = self.myperms2['BigCenter-ANbr-'] + self.transform(self.myperms2['BigCenter-ANbr-'],3) + self.transform(self.myperms2['BigCenter-ANbr-'],14)
-            self.myperms2['BigCenter-ASwap2-'] = self.myperms2['BigCenter-ANbr-'] + self.transform(self.myperms2['BigCenter-ANbr-'],29)
-
-
-
-            if self.size >= 6:
-                self.myperms2['BigCenter-AOppW-'] = ('2F2', '2B2', '2L2', '2B2', '2F2', '2L2', '3R2', '3B2', '3F2', '3R2', '3F2', '3B2')
-                self.myperms2['BigCenter-ANbrW-'] = self.myperms2['BigCenter-ANbr-'] + self.transform(self.myperms2['BigCenter-ANbr-'],48)
-
-
-                self.myperms2['BigCenter-ACyc3W-'] = self.myperms2['BigCenter-ANbrW-'] + self.transform(self.myperms2['BigCenter-ANbrW-'],1)
-                self.myperms2['BigCenter-ACyc4W-'] = self.myperms2['BigCenter-ANbrW-'] + self.transform(self.myperms2['BigCenter-ANbrW-'],3) + self.transform(self.myperms2['BigCenter-ANbrW-'],14)
-                self.myperms2['BigCenter-ASwap2W-'] = self.myperms2['BigCenter-ANbrW-'] + self.transform(self.myperms2['BigCenter-ANbrW-'],29)
-
-
-            self.myperms2['CenterA-OppX'] = (" U ", '2R2', " U'", '2F2', ' U ', '2R2', " U'", '2F2')
-            self.myperms2['CenterA-OppX(1)'] = (" D'", '2L2', ' D ', '2R2', " D'", '2L2', ' D ', '2R2')
-            self.myperms2['CenterA-OppX(2)'] = ('2R2', '2F ', ' L ', "2F'", '2R2', '2F ', " L'", "2F'")
-            self.myperms2['CenterA-OppX(3)'] = ('2R2', "2B'", ' R ', '2B ', '2R2', "2B'", " R'", '2B ')
-            self.myperms2['CenterA-OppY'] = ('2R2', " U'", '2F2', ' U ', '2R2', " U'", '2F2', ' U ')
-            self.myperms2['CenterA-OppY(1)'] = ('2R2', " D'", '2L2', ' D ', '2R2', " D'", '2L2', ' D ')
-            self.myperms2['CenterA-OppY(2)'] = ('2F ', ' L ', "2F'", '2R2', '2F ', " L'", "2F'", '2R2')
-            self.myperms2['CenterA-OppY(3)'] = ("2B'", ' R ', '2B ', '2R2', "2B'", " R'", '2B ', '2R2')
-            self.myperms2['CenterA-OppZ'] = (" U'", '2R2', " U'", '2F2', ' U ', '2R2', " U'", '2F2', ' U2')
-            self.myperms2['CenterA-OppZ(1)'] = (" U'", '2R2', " U'", '2L2', ' U ', '2R2', " U'", '2L2', ' U2')
-            self.myperms2['CenterA-OppZ(2)'] = ('2R2', " D'", '2F ', '2B ', '2R2', "2F'", "2B'", '2R2', ' D ', '2R2')
-            self.myperms2['CenterA-OppZ(3)'] = ('2R2', " D'", '2R2', '2B ', '2F ', '2R2', "2B'", "2F'", ' D ', '2R2')
-            self.myperms2['CenterA-OppZ(4)'] = ('2F2', ' D ', '2R ', '2L ', '2F2', "2R'", "2L'", '2F2', " D'", '2F2')
-            self.myperms2['CenterA-OppZ(5)'] = ('2F2', ' D ', '2F2', '2L ', '2R ', '2F2', "2L'", "2R'", " D'", '2F2')
-            self.myperms2['CenterA-OppZ(6)'] = ('2B2', " D'", '2F2', ' D ', '2B2', " D'", '2L2', '2F2', '2L2', ' D ')
-            
-
-
-            self.myperms2['CenterA-IO_D(0)'] = ("2F'", '2U ', '2F ', " U2", "2F'", "2U'", '2F ', " U2")
-            self.myperms2['CenterA-IO_V(0)'] = ('2R ', '2U2', "2R'", " U2", '2R ', '2U2', "2R'", " U2")
-            self.myperms2['CenterA-IO_D(1)'] = ("2F'", '2U ', '2F ', " D2", "2F'", "2U'", '2F ', " D2")
-            self.myperms2['CenterA-IO_V(1)'] = ('2R ', '2U2', "2R'", " D2", '2R ', '2U2', "2R'", " D2")
-            self.myperms2['CenterA-IO_V(2)'] = ("2R "," U ","2L'"," U'","2R'"," U ","2L "," U'")
-            self.myperms2['CenterA-IO_V(3)'] = ("2L'"," U ","2R "," U'","2L "," U ","2R'"," U'")
-            self.myperms2['CenterA-IO_D(2)'] = (' U ', "2L'", " U'", '2R ', ' U ', '2L ', " U'", "2R'")
-            self.myperms2['CenterA-IO_D(3)'] = (' U ', "2R ", " U'", "2L'", ' U ', "2R'", " U'", "2L ")
-
-
-            
-            self.myperms2['CenterA-II_D(0)'] = (' U2', '2R ', '2U2', "2R'", " U2", '2R ', '2U2', "2R'")
-            self.myperms2['CenterA-OO_D(0)'] = (" D2", '2R ', '2U2', "2R'", " D2", '2R ', '2U2', "2R'")
-            self.myperms2['CenterA-II_V(0)'] = (" U2", "2F'", '2U ', '2F ', " U2", "2F'", "2U'", '2F ')
-            self.myperms2['CenterA-OO_V(0)'] = (" D2", "2F'", '2U ', '2F ', " D2", "2F'", "2U'", '2F ')
-
-            self.myperms2['CenterA-IO_D(4)'] = (' U2', "2B'", "2U'", '2B ', ' U2', "2B'", '2U ', '2B ')
-            self.myperms2['CenterA-IO_D(5)'] = (' D2', "2B'", "2U'", '2B ', ' D2', "2B'", '2U ', '2B ')
-
-            self.myperms2['CenterA-3AAA(0)'] = (" F ","2D "," R2","2D'","2R'","2D "," R2","2D'","2R "," F'")
-            self.myperms2['CenterA-3CCC(0)'] = (" F ","2U'"," R2","2U ","2L ","2U'"," R2","2U ","2L'"," F'")
-            self.myperms2['CenterA-3BBB(0)'] = (" F'","2D'","2L'"," U2","2L ","2D ","2L'"," U2","2L "," F ")
-            self.myperms2['CenterA-3DDD(0)'] = (" F'","2U ","2R "," U2","2R'","2U'","2R "," U2","2R'"," F ")
-
-            self.myperms2['CenterA-3AAC(0)'] = (" F'","2D "," R2","2D'","2R'","2D "," R2","2D'","2R "," F ")
-            self.myperms2['CenterA-3CCA(0)'] = (" F'","2U'"," R2","2U ","2L ","2U'"," R2","2U ","2L'"," F ")
-            self.myperms2['CenterA-3BBD(0)'] = (" F ","2D'","2L'"," U2","2L ","2D ","2L'"," U2","2L "," F'")
-            self.myperms2['CenterA-3DDB(0)'] = (" F ","2U ","2R "," U2","2R'","2U'","2R "," U2","2R'"," F'")
-            
-            self.myperms2['CenterA-3AAD(0)'] = ("2D "," R2","2D'","2R'","2D "," R2","2D'","2R ")
-            self.myperms2['CenterA-3CCB(0)'] = ("2U'"," R2","2U ","2L ","2U'"," R2","2U ","2L'")
-            self.myperms2['CenterA-3BBC(0)'] = ("2D'","2L'"," U2","2L ","2D ","2L'"," U2","2L ")
-            self.myperms2['CenterA-3DDA(0)'] = ("2U ","2R "," U2","2R'","2U'","2R "," U2","2R'")
-
-            self.myperms2['CenterA-3AAB(0)'] = ('2U ', "2L'", ' U2', '2L ', "2U'", "2L'", ' U2', '2L ')
-            self.myperms2['CenterA-3CCD(0)'] = ("2D'", '2R ', ' U2', "2R'", '2D ', '2R ', ' U2', "2R'")
-            self.myperms2['CenterA-3DDC(0)'] = ('2D ', ' R2', "2D'", '2L ', '2D ', ' R2', "2D'", "2L'")
-            self.myperms2['CenterA-3BBA(0)'] = ("2U'", ' R2', '2U ', "2R'", "2U'", ' R2', '2U ', '2R ')
-
-            self.myperms2['CenterA-3ADC(0)'] = ("2L'"," D'","2F'",' D ','2L '," D'",'2F ',' D ')
-            self.myperms2['CenterA-3CBA(0)'] = ("2R "," D'","2B ",' D ',"2R'"," D'","2B'",' D ')
-            self.myperms2['CenterA-3BAD(0)'] = ("2R "," D ","2F'"," D'","2R'"," D ","2F "," D'")
-            self.myperms2['CenterA-3DCB(0)'] = ("2L'"," D ","2B "," D'","2L "," D ","2B'"," D'")
-
-            self.myperms2['CenterA-3ABC(0)'] = (" U2","2L'"," D'","2F'",' D ','2L '," D'",'2F ',' D '," U2")
-            self.myperms2['CenterA-3CDA(0)'] = (" U2","2R "," D'","2B ",' D ',"2R'"," D'","2B'",' D '," U2")
-            self.myperms2['CenterA-3BCD(0)'] = (" U2","2R "," D ","2F'"," D'","2R'"," D ","2F "," D'"," U2")
-            self.myperms2['CenterA-3DAB(0)'] = (" U2","2L'"," D ","2B "," D'","2L "," D ","2B'"," D'"," U2")
-
-            self.myperms2['CenterA-3V-AAD(0)'] = ("2R "," U ","2L "," U'","2R'"," U ","2L'"," U'")
-            self.myperms2['CenterA-3V-CCB(0)'] = ("2L'"," U ","2R'"," U'","2L "," U ","2R "," U'")
-            self.myperms2['CenterA-3V-ADA(0)'] = ("2R ", ' F ', '2U2', " F'", "2R'", ' F ', '2U2', " F'")
-            self.myperms2['CenterA-3V-CBC(0)'] = ("2L'", ' F ', '2D2', " F'", '2L ', ' F ', '2D2', " F'")
-
-            self.myperms2['CenterA-3V-ADD(0)'] = ("2L2"," F'","2R'"," F ","2L2"," F'","2R "," F ")
-            self.myperms2['CenterA-3V-CBB(0)'] = ("2R2"," F'","2L "," F ","2R2"," F'","2L'"," F ")
-            self.myperms2['CenterA-3V-AAA(0)'] = ('2U2', '2L ', '2F2', "2L'", ' F2', '2L ', '2F2', "2L'", ' F2', '2U2')
-            self.myperms2['CenterA-3V-CCC(0)'] = ('2D2', "2R'", '2B2', '2R ', ' F2', "2R'", '2B2', '2R ', ' F2', '2D2')
-            self.myperms2['CenterA-3V-CAA(0)'] = ('2D2', '2R ', '2B2', "2R'", ' B2', '2R ', '2B2', "2R'", ' B2', '2D2')
-            self.myperms2['CenterA-3V-ACC(0)'] = ('2U2', "2L'", '2F2', '2L ', ' B2', "2L'", '2F2', '2L ', ' B2', '2U2')
-
-            self.myperms2['CenterA-3V-ADB(0)'] = ('2D2', "2L'", ' U ', '2L ', '2D2', "2L'", " U'", '2L ')
-            self.myperms2['CenterA-3V-CBD(0)'] = ('2U2', '2R ', ' U ', "2R'", '2U2', '2R ', " U'", "2R'")
-            self.myperms2['CenterA-3V-ABD(0)'] = ('2L ', ' U ', "2L'", '2U2', '2L ', " U'", "2L'", '2U2')
-            self.myperms2['CenterA-3V-CDB(0)'] = ("2R'", ' U ', '2R ', '2D2', "2R'", " U'", '2R ', '2D2')
-            
-            self.myperms2['CenterA-3V-AAC(0)'] = ('2L ', ' U2', "2L'", '2D2', '2L ', ' U2', "2L'", '2D2')
-            self.myperms2['CenterA-3V-CCA(0)'] = ("2R'", ' U2', '2R ', '2U2', "2R'", ' U2', '2R ', '2U2')
-            self.myperms2['CenterA-3V-ACA(0)'] = ('2U2', '2L ', ' U2', "2L'", '2U2', '2L ', ' U2', "2L'")
-            self.myperms2['CenterA-3V-CAC(0)'] = ('2D2', "2R'", ' U2', '2R ', '2D2', "2R'", ' U2', '2R ')
-
-            self.myperms2['CenterA-3V-ACB(0)'] = ('2F2', '2L ', ' D ', '2R ', " D'", "2L'", ' D ', "2R'", " D'", '2F2')
-            self.myperms2['CenterA-3V-CAD(0)'] = ('2B2', "2R'", ' D ', "2L'", " D'", '2R ', ' D ', '2L ', " D'", '2B2')
-            self.myperms2['CenterA-3V-ABC(0)'] = ('2F2', '2L ', ' F ', '2D2', " F'", "2L'", ' F ', '2D2', '2F2', " F'")
-            self.myperms2['CenterA-3V-CDA(0)'] = ('2B2', "2R'", ' F ', '2U2', " F'", '2R ', ' F ', '2U2', '2B2', " F'")
-            self.myperms2['CenterA-3V-ABB(0)'] = ('2F2', '2R2', " F'", "2L'", ' F ', '2R2', " F'", '2L ', '2F2', ' F ')
-            self.myperms2['CenterA-3V-CDD(0)'] = ('2B2', '2L2', " F'", '2R ', ' F ', '2L2', " F'", "2R'", '2B2', ' F ')
-            self.myperms2['CenterA-3V-AAB(0)'] = ('2F2', " F'", '2R2', " F'", "2L'", ' F ', '2R2', " F'", '2L ', '2F2', ' F2')
-            self.myperms2['CenterA-3V-CCD(0)'] = ('2B2', " F'", '2L2', " F'", '2R ', ' F ', '2L2', " F'", "2R'", '2B2', ' F2') 
-            self.myperms2['CenterA-3V-ABA(0)'] = (' B2', '2F2', '2L ', ' B ', '2R2', " B'", "2L'", ' B ', '2R2', ' B ', '2F2')
-            self.myperms2['CenterA-3V-CDC(0)'] = (' B2', '2B2', "2R'", ' B ', '2L2', " B'", '2R ', ' B ', '2L2', ' B ', '2B2')
 
 
 
@@ -4284,436 +3955,172 @@ class Rubiks_3:
             self.myperms2['WingSwapSkewViaEdge-XB15-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-B07-'] + self.myperms2['WingSwapParallel-BY07-'])
 
 
-            
-            
 
-
-
-
-            if self.size % 2 == 1:
-                self.myperms2['CenterQXA-'] = (" S2","2R2"," S2","2R2")
-                self.myperms2['CenterQXB-'] = (" U "," S2","2R2"," S2","2R2"," U'")
-                self.myperms2['CenterQY-'] = (" E ","2R2"," E'","2R2")
-                self.myperms2['CenterQZ-'] = ('2B ', " E'", '2B2', ' E ', '2B ')
-                self.myperms2['CenterQWA-'] = ("2L2"," E2","2L'"," U ","2R'"," E2","2R "," U'","2L'")
-                self.myperms2['CenterQWB-'] = ("2R2"," E2","2R "," U ","2L "," E2","2L'"," U'","2R ")
-                self.myperms2['CenterQU-'] = ('2R ', ' S2', '2R2', ' S2', '2R ')
-                self.myperms2['CenterQV-'] = (" E'", "2B'", ' E ', '2B2', " E'", "2B'", ' E ')
-                self.myperms2['CenterQTA-'] = (' M ', '2U2', " M'", '2U ', ' S ', '2U2', " S'", "2U'")
-                self.myperms2['CenterQTB-'] = (" U ","2L'", " E'", '2B ', ' E ', "2B'", '2L ', '2B2', ' E2', '2B ', ' E2', '2B '," U'")
-                self.myperms2['CenterQTC-'] = (' S2', ' M2', ' D ', '2F2', " D'", ' S2', ' M2', ' D ', '2F2', " D'")
-
-                
-                self.myperms2['CenterQ6A-'] = ("2R "," E ","2R'"," E'")
-                self.myperms2['CenterQ6B-'] = (" E ","2R "," E'","2R'")                
-                self.myperms2['CenterQ6C-'] = ("2R "," E2","2R'"," E2")
-                self.myperms2['CenterQ6D-'] = (" E2","2R'"," E2","2R ")
-                self.myperms2['CenterQ6E-'] = ('2U ', " M'", '2B ', ' M ', "2B'", "2U'", " E'", "2F'", " E'", '2F ', ' E2')
-                self.myperms2['CenterQ6F-'] = ('2U ', ' S ', '2R ', " S'", " E'", '2F ', ' E ', "2F'", "2R'", "2U'")
-                self.myperms2['CenterQ6G-'] = ("2R "," E ","2R "," E'","2R2")
-                self.myperms2['CenterQ6H-'] = ("2R2"," E'","2R'"," E ","2R'")
-                self.myperms2['CenterQ6I-'] = (" M ","2U "," M ","2U'"," M2")
-                self.myperms2['CenterQ6J-'] = (" M2","2U'"," M'","2U "," M'")                
-
-
-
-                self.myperms2['CenterQ4A-'] = ("2R2"," E2","2R "," E2","2R ")
-                self.myperms2['CenterQ4B-'] = ("2R "," E2","2R "," E2","2R2")
-                self.myperms2['CenterQ4C-'] = ("2U "," S ","2R "," S'","2R'","2U'")
-                self.myperms2['CenterQ4D-'] = (" M'", "2B'", ' M2', "2U'", " M'", '2U ', '2B ')
-                self.myperms2['CenterQ4E-'] = ('2U ', " M'", '2U ', " M'", "2U'", ' M2', "2U'")
-                self.myperms2['CenterQ4XA-'] = ("2L'"," U ","2R'"," E2","2R "," U'"," E2","2L ")
-                self.myperms2['CenterQ4XB-'] = ("2L'"," D'","2R'"," E2","2R "," D "," E2","2L ")
-                self.myperms2['CenterQ4YA-'] = ("2B "," U'","2R "," E'","2R'"," U "," E ","2B'")
-                self.myperms2['CenterQ4YB-'] = ("2B "," D ","2R "," E'","2R'"," D'"," E ","2B'")                
-                self.myperms2['CenterQ4YC-'] = ('2L ', " U'", '2R ', ' E2', "2R'", " U ", ' E2', "2L'")
-                self.myperms2['CenterQ4YD-'] = ('2L ', ' D ', '2R ', ' E2', "2R'", " D'", ' E2', "2L'")
-                self.myperms2['CenterQ4ZA-'] = (' U2', '2R ', ' E2', '2R ', ' E2', '2R2', ' U2')
-                self.myperms2['CenterQ4ZB-'] = (' D2', '2R ', ' E2', '2R ', ' E2', '2R2', ' D2')
-                self.myperms2['CenterQ4ZC-'] = (' U2', '2R ', ' E2', "2R'", ' U2', '2L2', ' E2', '2L2')
-                self.myperms2['CenterQ4ZD-'] = (' D2', '2R ', ' E2', "2R'", ' D2', '2L2', ' E2', '2L2')
-                self.myperms2['CenterQ4WA-'] = ('2L ', ' E2', ' D ', '2R ', ' E2', "2R'", " D'", "2L'")
-                self.myperms2['CenterQ4WB-'] = ('2L ', ' E2', " U'", '2R ', ' E2', "2R'", " U ", "2L'")
-
-
-                self.myperms2['BigCenter-BOpp-'] = (" M2","2F2"," M2","2F2"," S2","2R2"," S2","2R2")
-                self.myperms2['BigCenter-BNbr-'] = ("2R "," U "," M'"," U'","2R'"," U "," M "," U2","2R "," U "," M'"," U'","2R'"," U "," M2",
-                                                   " F'","2L "," F "," M'"," F'","2L'"," F2"," M "," F'","2L "," F "," M'"," F'","2L'")
-
-
-                self.myperms2['BigCenter-BCyc3-'] = self.myperms2['BigCenter-BNbr-'] + self.transform(self.myperms2['BigCenter-BNbr-'],1)
-                self.myperms2['BigCenter-BCyc4-'] = self.myperms2['BigCenter-BNbr-'] + self.transform(self.myperms2['BigCenter-BNbr-'],3) + self.transform(self.myperms2['BigCenter-BNbr-'],14)
-                self.myperms2['BigCenter-BSwap2-'] = self.myperms2['BigCenter-BNbr-'] + self.transform(self.myperms2['BigCenter-BNbr-'],29)
-
-
-                self.myperms2['MidBar(VV)'] = (" M'"," U "," L "," R'"," M "," F'"," M "," F "," L'"," R "," M'"," U'")
-                self.myperms2['MidBar(HV)'] = (' U ', ' M ', " R'", ' L ', " F'", " M'", ' F ', " M'", ' R ', " L'", " U'", ' M ')
-                self.myperms2['MidBar(HH)'] = (' M ', " R'", ' L ', " F'", " M'", ' F ', " M'", ' R ', " L'", " U'", ' M ',' U ')
-
-                self.myperms2['MidBar-Opp(VV)'] = (" M2"," U "," L2"," R2"," M2"," D'"," M2"," D "," L2"," R2"," M2"," U'")
-                self.myperms2['MidBar-Opp(HV)'] = (' U ', ' M2', " R2", ' L2', " D'", " M2", ' D ', " M2", ' R2', " L2", " U'", ' M2')
-
-                self.myperms2['MidBar-3A'] = (" F "," U "," L "," R'"," M "," F'"," M "," F "," L'"," R "," M'"," U'"," M'"," F'")
-                self.myperms2['MidBar-3B'] = (" U "," L "," R'"," M "," F'"," M "," F "," L'"," R "," M'"," U'"," M'")
-                self.myperms2['MidBar-3C'] = (' F ',' L '," R'",' M '," F'",' M ',' F '," L'",' R '," M'"," U'"," M'",' U '," F'")
-                self.myperms2['MidBar-3D'] = (" L "," R'"," M "," F'"," M "," F "," L'"," R "," M'"," U'"," M'"," U ")                
-                self.myperms2['MidBar-3E'] = (" B'"," F "," U "," L "," R'"," M "," F'"," M "," F "," L'"," R "," M'"," U'"," M'"," F'"," B ")
-                self.myperms2['MidBar-3F'] = (" B'"," U "," L "," R'"," M "," F'"," M "," F "," L'"," R "," M'"," U'"," M'"," B ")
-                self.myperms2['MidBar-3G'] = (' B '," F'"," R'",' L ',' M ',' F ',' M '," F'",' R '," L'"," M'",' U '," M'"," U'",' F '," B'")
-                self.myperms2['MidBar-3H'] = (" B'"," L "," R'"," M "," F'"," M "," F "," L'"," R "," M'"," U'"," M'"," U "," B ")
-
-                self.myperms2['MidBar-3OA'] = (" E'"," U'"," M'"," U "," L "," R'"," M "," F'"," M "," F "," L'"," R "," M'"," E ")
-                self.myperms2['MidBar-3OB'] = self.invert_moves(self.myperms2['MidBar-3OA'])
-                self.myperms2['MidBar-3OC'] = (" E'"," M'"," U "," L "," R'"," M "," F'"," M "," F "," L'"," R "," M'"," U'"," E ")
-                self.myperms2['MidBar-3OD'] = self.invert_moves(self.myperms2['MidBar-3OC'])
-
-
-                if self.size >= 6:
-                    self.myperms2['BigCenter-BOppW-'] = self.myperms2['BigCenter-BOpp-'] + self.transform(self.myperms2['BigCenter-BOpp-'],48)
-                    self.myperms2['BigCenter-BNbrW-'] = self.myperms2['BigCenter-BNbr-'] + self.transform(self.myperms2['BigCenter-BNbr-'],48)
-
-
-                    self.myperms2['BigCenter-BCyc3W-'] = self.myperms2['BigCenter-BNbrW-'] + self.transform(self.myperms2['BigCenter-BNbrW-'],1)
-                    self.myperms2['BigCenter-BCyc4W-'] = self.myperms2['BigCenter-BNbrW-'] + self.transform(self.myperms2['BigCenter-BNbrW-'],3) + self.transform(self.myperms2['BigCenter-BNbrW-'],14)
-                    self.myperms2['BigCenter-BSwap2W-'] = self.myperms2['BigCenter-BNbrW-'] + self.transform(self.myperms2['BigCenter-BNbrW-'],29)
-
-
-
-
-                self.myperms2['CenterB-OppX'] = (" U ", '2R2', " U'", ' S2', ' U ', '2R2', " U'", ' S2')
-                self.myperms2['CenterB-OppX(1)'] = (' U ', '2R2', " U'", ' M2', ' U ', '2R2', " U'", ' M2')
-                self.myperms2['CenterB-OppX(2)'] = ('2F2', ' D ', ' M2', '2F2', ' M2', '2F2', " D'", '2F2')
-                self.myperms2['CenterB-OppY'] = ('2R2', " U'", ' S2', ' U ', '2R2', " U'", ' S2', ' U ')
-                self.myperms2['CenterB-OppY(1)'] = ('2R2', " U'", ' M2', ' U ', '2R2', " U'", ' M2', ' U ')
-                self.myperms2['CenterB-OppZ'] = (" M2"," U ","2F2"," U'"," M2"," U ","2F2"," U'")
-                self.myperms2['CenterB-OppZ(1)'] = (' M2', ' U ', '2R2', " U'", ' M2', ' U ', '2R2', " U'")
-                
-
-                self.myperms2['CenterB-MI(0)'] = (" S'", '2U ', ' S ', " U2", " S'", "2U'", ' S ', " U2")
-                self.myperms2['CenterB-MO(0)'] = (" S'", '2U ', ' S ', " D2", " S'", "2U'", ' S ', " D2")
-                self.myperms2['CenterB-MV(0)'] = ('2R ', ' E2', "2R'", " U2", '2R ', ' E2', "2R'", " U2")
-                self.myperms2['CenterB-MV(1)'] = ('2R ', ' E2', "2R'", " D2", '2R ', ' E2', "2R'", " D2")
-                self.myperms2['CenterB-MV(2)'] = ("2R "," U "," M'"," U'","2R'"," U "," M "," U'")
-                self.myperms2['CenterB-MV(3)'] = ("2L'"," U "," M'"," U'","2L "," U "," M "," U'")
-                self.myperms2['CenterB-MV(4)'] = (" E'"," L2"," E ","2R'"," E'"," L2"," E ","2R ")
-                self.myperms2['CenterB-MV(5)'] = (" S'", ' L2', ' S ', "2L'", " S'", ' L2', ' S ', '2L ')
-
-                
-                self.myperms2['CenterB-MD(0)'] = (' U2', '2R ', ' E2', "2R'", " U2", '2R ', ' E2', "2R'")
-                self.myperms2['CenterB-MD(1)'] = (" D2", '2R ', ' E2', "2R'", " D2", '2R ', ' E2', "2R'")
-                self.myperms2['CenterB-MD(2)'] = ("2R'"," E'"," L2"," E ","2R "," E'"," L2"," E ")
-                self.myperms2['CenterB-MD(3)'] = ("2L'", " S'", ' L2', ' S ', '2L ', " S'", ' L2', ' S ')
-
-                self.myperms2['CenterB-MI(1)'] = (" U2", " S'", '2U ', ' S ', " U2", " S'", "2U'", ' S ')
-                self.myperms2['CenterB-MO(1)'] = (" D2", " S'", '2U ', ' S ', " D2", " S'", "2U'", ' S ')
-
-                self.myperms2['CenterB-MI(2)'] = (' U2', '2F ', ' E ', "2F'", ' U2', '2F ', " E'", "2F'")
-                self.myperms2['CenterB-MO(2)'] = (' D2', '2F ', ' E ', "2F'", ' D2', '2F ', " E'", "2F'")
-
-                self.myperms2['CenterB-MI(3)'] = (" U ", " M'", " U'", "2L'", " U ", ' M ', " U'", '2L ')
-                self.myperms2['CenterB-MO(3)'] = (" U ", " M'", " U'", "2R ", " U ", ' M ', " U'", "2R'")
-
-                self.myperms2['CenterB-MI(4)'] = (" F'", '2L ', ' F ', ' M ', " F'", "2L'", ' F ', " M'")
-                self.myperms2['CenterB-MO(4)'] = (" F'", "2R'", ' F ', ' M ', " F'", "2R ", ' F ', " M'")
-
-
-
-
-                self.myperms2['CenterB-IO(0)'] = (" U2","2D'"," M'","2D "," M "," U2"," M'","2D'"," M ","2D ")
-                self.myperms2['CenterB-IO(1)'] = (" U2","2U "," M'","2U'"," M "," U2"," M'","2U "," M ","2U'")
-                self.myperms2['CenterB-IO(2)'] = (" M'"," U ","2R "," U'"," M "," U ","2R'"," U'")
-                self.myperms2['CenterB-IO(3)'] = (" M'"," U ","2L'"," U'"," M "," U ","2L "," U'")                
-                self.myperms2['CenterB-OO(0)'] = ("2D'"," M'","2D "," M "," U2"," M'","2D'"," M ","2D "," U2")
-                self.myperms2['CenterB-II(0)'] = ("2U "," M'","2U'"," M "," U2"," M'","2U "," M ","2U'"," U2")
-
-                self.myperms2['CenterB-3AAA(0)'] = (" F ","2D "," R2","2D'"," M ","2D "," R2","2D'"," M'"," F'")
-                self.myperms2['CenterB-3CCC(0)'] = (" F ","2U'"," R2","2U "," M ","2U'"," R2","2U "," M'"," F'")
-                self.myperms2['CenterB-3BBB(0)'] = (" F'"," E'","2L'"," U2","2L "," E ","2L'"," U2","2L "," F ")
-                self.myperms2['CenterB-3DDD(0)'] = (" F'"," E'","2R "," U2","2R'"," E ","2R "," U2","2R'"," F ")
-
-                self.myperms2['CenterB-3AAC(0)'] = (" F'","2D "," R2","2D'"," M ","2D "," R2","2D'"," M'"," F ")
-                self.myperms2['CenterB-3CCA(0)'] = (" F'","2U'"," R2","2U "," M ","2U'"," R2","2U "," M'"," F ")
-                self.myperms2['CenterB-3BBD(0)'] = (" F "," E'","2L'"," U2","2L "," E ","2L'"," U2","2L "," F'")
-                self.myperms2['CenterB-3DDB(0)'] = (" F "," E'","2R "," U2","2R'"," E ","2R "," U2","2R'"," F'")
-            
-                self.myperms2['CenterB-3AAD(0)'] = ("2D "," R2","2D'"," M ","2D "," R2","2D'"," M'")
-                self.myperms2['CenterB-3CCB(0)'] = ("2U'"," R2","2U "," M ","2U'"," R2","2U "," M'")
-                self.myperms2['CenterB-3BBC(0)'] = (" E'","2L'"," U2","2L "," E ","2L'"," U2","2L ")
-                self.myperms2['CenterB-3DDA(0)'] = (" E'","2R "," U2","2R'"," E ","2R "," U2","2R'")
-
-                self.myperms2['CenterB-3DDC(0)'] = ('2L2', " F'", ' E ', ' F ', '2L ', " F'", " E'", ' F ', '2L ')
-                self.myperms2['CenterB-3BBA(0)'] = ('2R2', " F'", ' E ', ' F ', "2R'", " F'", " E'", ' F ', "2R'")
-                self.myperms2['CenterB-3CCD(0)'] = ('2D ', ' F ', " M'", " F'", '2D ', ' F ', ' M ', " F'", '2D2')
-                self.myperms2['CenterB-3AAB(0)'] = ("2U'", ' F ', " M'", " F'", "2U'", ' F ', ' M ', " F'", '2U2')
-                
-
-                self.myperms2['CenterB-3ADC(0)'] = ("2L'"," D'"," S'",' D ','2L '," D'",' S ',' D ')
-                self.myperms2['CenterB-3CBA(0)'] = ("2R "," D'"," S'",' D ',"2R'"," D'"," S ",' D ')
-                self.myperms2['CenterB-3BAD(0)'] = (" M'", ' D ', "2F'", " D'", ' M ', ' D ', "2F ", " D'")
-                self.myperms2['CenterB-3DCB(0)'] = (" M'", ' D ', '2B ', " D'", ' M ', ' D ', "2B'", " D'")
-
-                self.myperms2['CenterB-3ABC(0)'] = (" U2","2L'"," D'"," S'",' D ','2L '," D'",' S ',' D '," U2")
-                self.myperms2['CenterB-3CDA(0)'] = (" U2","2R "," D'"," S'",' D ',"2R'"," D'"," S ",' D '," U2")
-                self.myperms2['CenterB-3BCD(0)'] = (" U2"," M'", "2F'", ' M ', ' U ', " M'", " U'", '2F ', ' U ', ' M ', " U ")
-                self.myperms2['CenterB-3DAB(0)'] = (" U2"," M'", "2B ", ' M ', ' U ', " M'", " U'", "2B'", ' U ', ' M ', " U ")
-
-                self.myperms2['CenterB-3V-BBA(0)'] = ("2R "," U "," M "," U'","2R'"," U "," M'"," U'")
-                self.myperms2['CenterB-3V-BBC(0)'] = ('2R '," U'",' M ',' U ',"2R'"," U'"," M'",' U ')
-                self.myperms2['CenterB-3V-BDC(0)'] = (" U2","2L'"," U "," M "," U'","2L "," U "," M'"," U ")
-                self.myperms2['CenterB-3V-BDA(0)'] = (" U2","2L'"," U'",' M ',' U ',"2L "," U'"," M'"," U'")
-                self.myperms2['CenterB-3V-BAB(0)'] = ("2R ", ' F ', ' E2', " F'", "2R'", ' F ', ' E2', " F'")
-                self.myperms2['CenterB-3V-BCB(0)'] = ("2R ", " F'", ' E2', " F ", "2R'", " F'", ' E2', " F ")
-
-                self.myperms2['CenterB-3V-ABB(0)'] = ("2R2"," F "," M "," F'","2R2"," F "," M'"," F'")
-                self.myperms2['CenterB-3V-CBB(0)'] = ("2R2"," F'"," M "," F ","2R2"," F'"," M'"," F ")
-                self.myperms2['CenterB-3V-CAB(0)'] = (" F'","2R2"," F'"," M "," F ","2R2"," F'"," M'"," F2")
-                self.myperms2['CenterB-3V-ACB(0)'] = (" F ","2R2"," F "," M "," F'","2R2"," F "," M'"," F2")
-
-                self.myperms2['CenterB-3V-AAB(0)'] = (" M'"," U'","2R'"," U "," M "," U'","2R "," U ")
-                self.myperms2['CenterB-3V-CCB(0)'] = (" M'"," U ","2R'"," U'"," M "," U ","2R "," U'")
-                self.myperms2['CenterB-3V-ABA(0)'] = (" M'", " F'", '2U2', ' F ', ' M ', " F'", '2U2', ' F ')
-                self.myperms2['CenterB-3V-CBC(0)'] = (" M'", ' F ', '2D2', " F'", ' M ', ' F ', '2D2', " F'")
-
-                self.myperms2['CenterB-3V-BAA(0)'] = (" M2"," F'","2R'"," F "," M2"," F'","2R "," F ")
-                self.myperms2['CenterB-3V-BCC(0)'] = (" M2"," F ","2R'"," F'"," M2"," F ","2R "," F'")
-
-                self.myperms2['CenterB-3V-BDD(0)'] = ("2L ", " S ", ' R2', " S'", '2L2', " S ", ' R2', " S'", "2L ")
-                self.myperms2['CenterB-3V-BBB(0)'] = ('2L ', ' E2', "2L'", ' U2', '2L ', ' E2', '2L2', ' E2', '2L ', ' U2', "2L'", ' E2', '2L ')
-                self.myperms2['CenterB-3V-BDB(0)'] = (' E2', "2L'", ' U2', '2L ', ' E2', "2L'", ' U2', '2L ')
-                self.myperms2['CenterB-3V-BBD(0)'] = ('2L ', ' U2', "2L'", ' E2', '2L ', ' U2', "2L'", ' E2')
-                self.myperms2['CenterB-3V-BCA(0)'] = (" S ", "2U ", " S'", ' U2', " S ", '2U2', " S'", ' U2', " S ", "2U ", " S'")
-                self.myperms2['CenterB-3V-BAC(0)'] = (" S'", '2D ', ' S ', ' U2', " S'", '2D2', ' S ', ' U2', " S'", '2D ', ' S ')
-
-                self.myperms2['CenterB-3V-CCA(0)'] = ("2U2"," B "," M "," B'","2U2"," B "," M'"," B'")
-                self.myperms2['CenterB-3V-AAC(0)'] = ("2D2"," B "," M "," B'","2D2"," B "," M'"," B'")
-                self.myperms2['CenterB-3V-ACA(0)'] = (' F ', " M'", " F'", '2U2', ' F ', ' M ', " F'", '2U2')
-                self.myperms2['CenterB-3V-CAC(0)'] = (' F ', " M'", " F'", '2D2', ' F ', ' M ', " F'", '2D2')
-                self.myperms2['CenterB-3V-CCC(0)'] = (" B2","2U2"," B "," M "," B'","2U2"," B "," M'"," B ")
-                self.myperms2['CenterB-3V-AAA(0)'] = (" B2","2D2"," B "," M "," B'","2D2"," B "," M'"," B ")
-
-                self.myperms2['CenterB-3V-ABD(0)'] = (' E2', '2R ', " U'", "2R'", ' E2', '2R ', ' U ', "2R'")
-                self.myperms2['CenterB-3V-CBD(0)'] = (' E2', '2R ', ' U ', "2R'", ' E2', '2R ', " U'", "2R'")
-                
-            if self.size >= 6:
-                self.myperms2['CenterRXA-'] = ("2R2","3F2","2R2","3F2")
-                self.myperms2['CenterRXB-'] = (" U ","2R2","3F2","2R2","3F2"," U'")
-                self.myperms2['CenterRXC-'] = (" U2","2R2","3F2","2R2","3F2"," U2")
-                self.myperms2['CenterRWA-'] = ("2L2","3D2","2L'"," U ","2R'","3D2","2R "," U'","2L'")
-                self.myperms2['CenterRWB-'] = ("2R2","3U2","2R "," U ","2L ","3U2","2L'"," U'","2R ")
-                self.myperms2['CenterRWC-'] = ("2L2","3U2","2L'"," U ","2R'","3U2","2R "," U'","2L'")
-                self.myperms2['CenterRWD-'] = ("2R2","3D2","2R "," U ","2L ","3D2","2L'"," U'","2R ")
-                self.myperms2['CenterRVA-'] = ('2L2', ' U ', '2L2', '3B2', '2L2', " U'", '2L2', ' U ', '3B2', " U'")
-                self.myperms2['CenterRVB-'] = (" U'", '2L2', ' U ', '2L2', '3B2', '2L2', " U'", '2L2', ' U ', '3B2')
-                self.myperms2['CenterRVC-'] = ('2B2', '3L2', '2B2', '3L2', ' U ', '3B2', '2R2', '3B2', '2R2', " U'")
-                self.myperms2['CenterRUA-'] = ("3L'", "2D'", '3B ', '2D ', "3B'", '3L ', '3B2', '2U2', '3B ', '2U2', '3B ')
-                self.myperms2['CenterRUB-'] = ("3L'", "2U ", '3B ', "2U'", "3B'", '3L ', '3B2', '2D2', '3B ', '2D2', '3B ')
-                self.myperms2['CenterRUC-'] = (" U ","3L'", "2D'", '3B ', '2D ', "3B'", '3L ', '3B2', '2U2', '3B ', '2U2', '3B '," U'")
-                self.myperms2['CenterRUD-'] = (" U ","3L'", "2U ", '3B ', "2U'", "3B'", '3L ', '3B2', '2D2', '3B ', '2D2', '3B '," U'")
-                self.myperms2['CenterRUE-'] = (" U2","3L'", "2D'", '3B ', '2D ', "3B'", '3L ', '3B2', '2U2', '3B ', '2U2', '3B '," U2")
-                self.myperms2['CenterRUF-'] = (" U2","3L'", "2U ", '3B ', "2U'", "3B'", '3L ', '3B2', '2D2', '3B ', '2D2', '3B '," U2")
-                self.myperms2['CenterRZA-'] = ('3L2', '2B2', '3L2', '2B2', ' U2', '3R2', '2B2', '3R2', '2B2', ' U2')
-                self.myperms2['CenterRZB-'] = (" U ", '3L2', '2B2', '3L2', '2B2', ' U2', '3R2', '2B2', '3R2', '2B2', ' U ')
-
-                self.myperms2['CenterR8-'] = ("3U2","2R2","3U'","2R2","3U'","2R2","3U'","2R2","3U ")      
-                
-                self.myperms2['CenterR6A-'] = ("2R ","3U ","2R'","3U'")
-                self.myperms2['CenterR6B-'] = ("2R ","3U'","2R'","3U ")
-                self.myperms2['CenterR6C-'] = ("2R ","3U2","2R'","3U2")
-                self.myperms2['CenterR6D-'] = ("2R2","3U ","2R2","3U'")
-                self.myperms2['CenterR6E-'] = ("2R'", "3F'", "2U'", '3F ', '2U ', '2R ', '3L ', '2F2', '3L ', '2F2', '3L2')
-                self.myperms2['CenterR6F-'] = ('3L ', "2F'", '3D ', '2F ', "3D'", '2L ', "3L'", '3B2', '2L ', '3B2', '2L2')
-                self.myperms2['CenterR6G-'] = ("2R ","3U ","2R ","3U'","2R2")
-                self.myperms2['CenterR6H-'] = ("2R ","3U'","2R ","3U ","2R2")
-                self.myperms2['CenterR6I-'] = ("2R2","3U ","2R'","3U'","2R'")
-                self.myperms2['CenterR6J-'] = ("2R2","3U'","2R'","3U ","2R'")
-                self.myperms2['CenterR6K-'] = ("2R2","3U ","2R2","3U ","2R2","3U2","2R2")
-                self.myperms2['CenterR6L-'] = ("2R2","3U2","2R2","3U ","2R2","3U ","2R2")
-                self.myperms2['CenterR6M-'] = ("2U ","3R2","2U2","3R2","2U ")
-                self.myperms2['CenterR6N-'] = ("2F ","3R ","2F2","3R'","2F ")
-                self.myperms2['CenterR6O-'] = ("2F'","3R ","2F2","3R'","2F'")                
-
-                self.myperms2['CenterR4A-'] = ("2R2","3U2","2R ","3U2","2R ")
-                self.myperms2['CenterR4B-'] = ("2R ","3U2","2R ","3U2","2R2")
-                self.myperms2['CenterR4C-'] = ("2U ","3F ","2R ","3F'","2R'","2U'")
-                self.myperms2['CenterR4D-'] = ("2F'", '3D ', "2R'", "3D'", '2R ', '2F ')
-                self.myperms2['CenterR4XA-'] = ("2L'"," U ","2R'","3D2","2R "," U'","3D2","2L ")
-                self.myperms2['CenterR4XB-'] = ("2L'"," D'","2R'","3D2","2R "," D ","3D2","2L ")
-                self.myperms2['CenterR4YA-'] = ("2B "," U'","2R ","3U ","2R'"," U ","3U'","2B'")
-                self.myperms2['CenterR4YB-'] = ("2B "," D ","2R ","3U ","2R'"," D'","3U'","2B'")
-                self.myperms2['CenterR4YC-'] = ('2L ', " U'", '2R ', '3U2', "2R'", " U ", '3U2', "2L'")
-                self.myperms2['CenterR4YD-'] = ('2L ', ' D ', '2R ', '3U2', "2R'", " D'", '3U2', "2L'")
-                self.myperms2['CenterR4ZA-'] = (' U2', '2R ', '3U2', '2R ', '3U2', '2R2', ' U2')
-                self.myperms2['CenterR4ZB-'] = (' D2', '2R ', '3U2', '2R ', '3U2', '2R2', ' D2')
-                self.myperms2['CenterR4ZC-'] = (' U2', '2R ', '3U2', "2R'", ' U2', '2L2', '3U2', '2L2')
-                self.myperms2['CenterR4ZD-'] = (' D2', '2R ', '3U2', "2R'", ' D2', '2L2', '3U2', '2L2')
-                self.myperms2['CenterR4WA-'] = ('2L ', '3U2', ' D ', '2R ', '3U2', "2R'", " D'", "2L'")
-                self.myperms2['CenterR4WB-'] = ('2L ', '3U2', " U'", '2R ', '3U2', "2R'", " U ", "2L'")
-                
-
-                self.myperms2['BigCenter-COpp-'] = ("2R2"," U ","3R2"," U'","2R2"," U ","3R2"," U2","2R2"," U ","3R2"," U'","2R2"," U ","3R2",
-                                                    "2L2"," D ","3L2"," D'","2L2"," D ","3L2"," D2","2L2"," D ","3L2"," D'","2L2"," D ","3L2")
-                self.myperms2['BigCenter-CNbr-'] = ("2R "," U ","3R "," U'","2R'"," U ","3R'"," U2","2R "," U ","3R "," U'","2R'"," U ","3R'",
-                                                    "2L "," F ","3L "," F'","2L'"," F ","3L'"," F2","2L "," F ","3L "," F'","2L'"," F ","3L'")
-                                               
-
-                self.myperms2['BigCenter-CCyc3-'] = self.myperms2['BigCenter-CNbr-'] + self.transform(self.myperms2['BigCenter-CNbr-'],1)
-                self.myperms2['BigCenter-CCyc4-'] = self.myperms2['BigCenter-CNbr-'] + self.transform(self.myperms2['BigCenter-CNbr-'],3) + self.transform(self.myperms2['BigCenter-CNbr-'],14)
-                self.myperms2['BigCenter-CSwap2-'] = self.myperms2['BigCenter-CNbr-'] + self.transform(self.myperms2['BigCenter-CNbr-'],29)
-
-
-
-
-                self.myperms2['BigCenter-COppW-'] = ('2R2', '3F2', '3B2', '2R2', '3B2', '3F2', '2B2', '3L2', '2B2', '3R2', '3L2', '2F2', '3R2', '2F2')
-                self.myperms2['BigCenter-CNbrW-'] = self.myperms2['BigCenter-CNbr-'] + self.transform(self.myperms2['BigCenter-CNbr-'],48)
-
-                self.myperms2['BigCenter-CCyc3W-'] = self.myperms2['BigCenter-CNbrW-'] + self.transform(self.myperms2['BigCenter-CNbrW-'],1)
-                self.myperms2['BigCenter-CCyc4W-'] = self.myperms2['BigCenter-CNbrW-'] + self.transform(self.myperms2['BigCenter-CNbrW-'],3) + self.transform(self.myperms2['BigCenter-CNbrW-'],14)
-                self.myperms2['BigCenter-CSwap2W-'] = self.myperms2['BigCenter-CNbrW-'] + self.transform(self.myperms2['BigCenter-CNbrW-'],29)
-
-
-                self.myperms2['CenterC-OppX'] = (" U ", '2R2', " U'", '3F2', ' U ', '2R2', " U'", '3F2')
-                self.myperms2['CenterC-OppX(1)'] = ('3B2', ' U ', '3B2', '2R2', '3B2', '2R2', " U'", '3B2')
-                self.myperms2['CenterC-OppX(2)'] = (" D'", '3L2', ' D ', '2R2', " D'", '3L2', ' D ', '2R2')
-                self.myperms2['CenterC-OppY'] = ('2R2', " U'", '3F2', ' U ', '2R2', " U'", '3F2', ' U ')
-                self.myperms2['CenterC-OppY(1)'] = ('2R2', ' U ', '3F2', " U'", '2R2', ' U ', '3F2', " U'")
-                self.myperms2['CenterC-OppY(2)'] = ('3F2', ' D ', '2R2', '3F2', '2R2', '3F2', " D'", '3F2')
-                self.myperms2['CenterC-OppY(3)'] = ('3B2', " U'", '2R2', '3B2', '2R2', '3B2', ' U ', '3B2')
-                self.myperms2['CenterC-OppY(4)'] = ('2R2', " U'", '3L2', ' U ', '2R2', " U'", '3L2', ' U ')
-                self.myperms2['CenterC-OppY(5)'] = ('2R2', ' U ', '3R2', " U'", '2R2', ' U ', '3R2', " U'")
-                self.myperms2['CenterC-OppZ'] = (' U ', '3F2', " U'", '2R2', ' U ', '3F2', " U'", '2R2')
-                self.myperms2['CenterC-OppZ(1)'] = ('3B2', " U'", '3B2', '2R2', '3B2', '2R2', ' U ', '3B2')
-                self.myperms2['CenterC-OppZ(2)'] = (' U ', '3F2', " U'", '2F2', ' U ', '3F2', " U'", '2F2')
-
-
-                self.myperms2['CenterC-IO_D(0)'] = ("3F'", '2U ', '3F ', " U2", "3F'", "2U'", '3F ', " U2")
-                self.myperms2['CenterC-IO_D(1)'] = ("3F'", '2U ', '3F ', " D2", "3F'", "2U'", '3F ', " D2")
-                self.myperms2['CenterC-IO_V(0)'] = ('2R ', '3U2', "2R'", " U2", '2R ', '3U2', "2R'", " U2")
-                self.myperms2['CenterC-IO_V(1)'] = ('2R ', '3U2', "2R'", " D2", '2R ', '3U2', "2R'", " D2")
-                self.myperms2['CenterC-IO_V(2)'] = ("2R "," U ","3L'"," U'","2R'"," U ","3L "," U'")
-                self.myperms2['CenterC-IO_V(3)'] = ("2L'"," U ","3R "," U'","2L "," U ","3R'"," U'")
-                self.myperms2['CenterC-IO_V(4)'] = ("2R "," U ","3R "," U'","2R'"," U ","3R'"," U'")
-                self.myperms2['CenterC-IO_V(5)'] = ("2L'"," U ","3L'"," U'","2L "," U ","3L "," U'")                
-                self.myperms2['CenterC-IO_D(2)'] = (' U ', "3L'", " U'", '2R ', ' U ', '3L ', " U'", "2R'")
-                self.myperms2['CenterC-IO_D(3)'] = (' U ', "3R ", " U'", "2L'", ' U ', "3R'", " U'", "2L ")
-                
-                self.myperms2['CenterC-II_D(0)'] = (' U2', '2R ', '3U2', "2R'", " U2", '2R ', '3U2', "2R'")
-                self.myperms2['CenterC-OO_D(0)'] = (" D2", '2R ', '3U2', "2R'", " D2", '2R ', '3U2', "2R'")
-                self.myperms2['CenterC-II_V(0)'] = (" U2", "3F'", '2U ', '3F ', " U2", "3F'", "2U'", '3F ')
-                self.myperms2['CenterC-OO_V(0)'] = (" D2", "3F'", '2U ', '3F ', " D2", "3F'", "2U'", '3F ')
-
-                self.myperms2['CenterC-IO_D(4)'] = (' U2', "3B'", "2U'", '3B ', ' U2', "3B'", '2U ', '3B ')
-                self.myperms2['CenterC-IO_D(5)'] = (' D2', "3B'", "2U'", '3B ', ' D2', "3B'", '2U ', '3B ')
-
-                
-
-                self.myperms2['CenterC-3AAA(0)'] = (" F ","2D "," R2","2D'","3R'","2D "," R2","2D'","3R "," F'")
-                self.myperms2['CenterC-3CCC(0)'] = (" F ","2U'"," R2","2U ","3L ","2U'"," R2","2U ","3L'"," F'")
-                self.myperms2['CenterC-3BBB(0)'] = (" F'","3D'","2L'"," U2","2L ","3D ","2L'"," U2","2L "," F ")
-                self.myperms2['CenterC-3DDD(0)'] = (" F'","3U ","2R "," U2","2R'","3U'","2R "," U2","2R'"," F ")
-
-                self.myperms2['CenterC-3AAC(0)'] = (" F'","2D "," R2","2D'","3R'","2D "," R2","2D'","3R "," F ")
-                self.myperms2['CenterC-3CCA(0)'] = (" F'","2U'"," R2","2U ","3L ","2U'"," R2","2U ","3L'"," F ")
-                self.myperms2['CenterC-3BBD(0)'] = (" F ","3D'","2L'"," U2","2L ","3D ","2L'"," U2","2L "," F'")
-                self.myperms2['CenterC-3DDB(0)'] = (" F ","3U ","2R "," U2","2R'","3U'","2R "," U2","2R'"," F'")
-                
-                self.myperms2['CenterC-3AAD(0)'] = ("2D "," R2","2D'","3R'","2D "," R2","2D'","3R ")
-                self.myperms2['CenterC-3CCB(0)'] = ("2U'"," R2","2U ","3L ","2U'"," R2","2U ","3L'")
-                self.myperms2['CenterC-3BBC(0)'] = ("3D'","2L'"," U2","2L ","3D ","2L'"," U2","2L ")
-                self.myperms2['CenterC-3DDA(0)'] = ("3U ","2R "," U2","2R'","3U'","2R "," U2","2R'")
-
-                self.myperms2['CenterC-3AAB(0)'] = ('3U ', "2L'", ' U2', '2L ', "3U'", "2L'", ' U2', '2L ')
-                self.myperms2['CenterC-3CCD(0)'] = ("3D'", '2R ', ' U2', "2R'", '3D ', '2R ', ' U2', "2R'")
-                self.myperms2['CenterC-3DDC(0)'] = ('2D ', ' R2', "2D'", '3L ', '2D ', ' R2', "2D'", "3L'")
-                self.myperms2['CenterC-3BBA(0)'] = ("2U'", ' R2', '2U ', "3R'", "2U'", ' R2', '2U ', '3R ')
-
-                self.myperms2['CenterC-3ADC(0)'] = ("2L'"," D'","3F'",' D ','2L '," D'",'3F ',' D ')
-                self.myperms2['CenterC-3CBA(0)'] = ("2R "," D'","3B ",' D ',"2R'"," D'","3B'",' D ')
-                self.myperms2['CenterC-3BAD(0)'] = ("2R "," D ","3F'"," D'","2R'"," D ","3F "," D'")
-                self.myperms2['CenterC-3DCB(0)'] = ("2L'"," D ","3B "," D'","2L "," D ","3B'"," D'")
-
-                self.myperms2['CenterC-3ABC(0)'] = (" U2","2L'"," D'","3F'",' D ','2L '," D'",'3F ',' D '," U2")
-                self.myperms2['CenterC-3CDA(0)'] = (" U2","2R "," D'","3B ",' D ',"2R'"," D'","3B'",' D '," U2")
-                self.myperms2['CenterC-3BCD(0)'] = (" U2","2R "," D ","3F'"," D'","2R'"," D ","3F "," D'"," U2")
-                self.myperms2['CenterC-3DAB(0)'] = (" U2","2L'"," D ","3B "," D'","2L "," D ","3B'"," D'"," U2")
-
-                self.myperms2['CenterC-3V-AAD(0)'] = ("2R "," U ","3L "," U'","2R'"," U ","3L'"," U'")
-                self.myperms2['CenterC-3V-CCB(0)'] = ("2L'"," U ","3R'"," U'","2L "," U ","3R "," U'")
-                self.myperms2['CenterC-3V-ADA(0)'] = ("2R ", ' F ', '3U2', " F'", "2R'", ' F ', '3U2', " F'")
-                self.myperms2['CenterC-3V-CBC(0)'] = ("2L'", ' F ', '3D2', " F'", '2L ', ' F ', '3D2', " F'")
-
-                self.myperms2['CenterC-3V-ADD(0)'] = ("2L2"," F'","3R'"," F ","2L2"," F'","3R "," F ")
-                self.myperms2['CenterC-3V-CBB(0)'] = ("2R2"," F'","3L "," F ","2R2"," F'","3L'"," F ")
-                self.myperms2['CenterC-3V-AAA(0)'] = ('3U2', '2L ', '3F2', "2L'", ' F2', '2L ', '3F2', "2L'", ' F2', '3U2')
-                self.myperms2['CenterC-3V-CCC(0)'] = ('3D2', "2R'", '3B2', '2R ', ' F2', "2R'", '3B2', '2R ', ' F2', '3D2')
-                self.myperms2['CenterC-3V-CAA(0)'] = ('3D2', '2R ', '3B2', "2R'", ' B2', '2R ', '3B2', "2R'", ' B2', '3D2')
-                self.myperms2['CenterC-3V-ACC(0)'] = ('3U2', "2L'", '3F2', '2L ', ' B2', "2L'", '3F2', '2L ', ' B2', '3U2')
-
-                self.myperms2['CenterC-3V-ADB(0)'] = ('3D2', "2L'", ' U ', '2L ', '3D2', "2L'", " U'", '2L ')
-                self.myperms2['CenterC-3V-CBD(0)'] = ('3U2', '2R ', ' U ', "2R'", '3U2', '2R ', " U'", "2R'")
-                self.myperms2['CenterC-3V-ABD(0)'] = ('2L ', ' U ', "2L'", '3U2', '2L ', " U'", "2L'", '3U2')
-                self.myperms2['CenterC-3V-CDB(0)'] = ("2R'", ' U ', '2R ', '3D2', "2R'", " U'", '2R ', '3D2')
-
-                self.myperms2['CenterC-3V-AAC(0)'] = ('2L ', ' U2', "2L'", '3D2', '2L ', ' U2', "2L'", '3D2')
-                self.myperms2['CenterC-3V-CCA(0)'] = ("2R'", ' U2', '2R ', '3U2', "2R'", ' U2', '2R ', '3U2')
-                self.myperms2['CenterC-3V-ACA(0)'] = ('3U2', '2L ', ' U2', "2L'", '3U2', '2L ', ' U2', "2L'")
-                self.myperms2['CenterC-3V-CAC(0)'] = ('3D2', "2R'", ' U2', '2R ', '3D2', "2R'", ' U2', '2R ')
-
-                self.myperms2['CenterC-3V-ACB(0)'] = ('3F2', '2L ', ' D ', '3R ', " D'", "2L'", ' D ', "3R'", " D'", '3F2')
-                self.myperms2['CenterC-3V-CAD(0)'] = ('3B2', "2R'", ' D ', "3L'", " D'", '2R ', ' D ', '3L ', " D'", '3B2')
-                self.myperms2['CenterC-3V-ABC(0)'] = ('3F2', '2L ', ' F ', '3D2', " F'", "2L'", ' F ', '3D2', '3F2', " F'")
-                self.myperms2['CenterC-3V-CDA(0)'] = ('3B2', "2R'", ' F ', '3U2', " F'", '2R ', ' F ', '3U2', '3B2', " F'")
-                self.myperms2['CenterC-3V-ABB(0)'] = ('2F2', '2R2', " F'", "3L'", ' F ', '2R2', " F'", '3L ', '2F2', ' F ')
-                self.myperms2['CenterC-3V-CDD(0)'] = ('2B2', '2L2', " F'", '3R ', ' F ', '2L2', " F'", "3R'", '2B2', ' F ')
-
-                self.myperms2['CenterC-3V-AAB(0)'] = ('2F2', " F'", '2R2', " F'", "3L'", ' F ', '2R2', " F'", '3L ', '2F2', ' F2')
-                self.myperms2['CenterC-3V-CCD(0)'] = ('2B2', " F'", '2L2', " F'", '3R ', ' F ', '2L2', " F'", "3R'", '2B2', ' F2')
-                self.myperms2['CenterC-3V-ABA(0)'] = (' B2', '2F2', '3L ', ' B ', '2R2', " B'", "3L'", ' B ', '2R2', ' B ', '2F2')
-                self.myperms2['CenterC-3V-CDC(0)'] = (' B2', '2B2', "3R'", ' B ', '2L2', " B'", '3R ', ' B ', '2L2', ' B ', '2B2')
-
-
-
-            self.myperms2['Bar-A'] = (' F2', '2R ', ' F2', ' D2', ' B2', '2L ', ' B2', ' D2')
-            self.myperms2['Bar-B'] = (' D2', ' B2', "2L'", ' B2', ' D2', ' F2', "2R'", ' F2')
-            
-            self.myperms2['Bar-C'] = (" F'", '2R ', ' F2', ' D2', ' B2', '2L ', ' B2', ' D2', " F'")
-            self.myperms2['Bar-D'] = (' F ', '2R ', ' F2', ' D2', ' B2', '2L ', ' B2', ' D2', ' F ')
-
-            self.myperms2['Bar-E'] = (' U ', " F'", '2R ', ' F2', ' D2', ' B2', '2L ', ' B2', ' D2', " F'", " U'")
-            self.myperms2['Bar-F'] = (' U ', ' F ', '2R ', ' F2', ' D2', ' B2', '2L ', ' B2', ' D2', ' F ', " U'")
-            self.myperms2['Bar-G'] = (" U'", " F'", '2R ', ' F2', ' D2', ' B2', '2L ', ' B2', ' D2', " F'", ' U ')
-            self.myperms2['Bar-H'] = (" U'", ' F ', '2R ', ' F2', ' D2', ' B2', '2L ', ' B2', ' D2', ' F ', ' U ')
 
 
             
-            self.myperms2['Bar-W'] = ('2R ', ' F2', ' D2', ' B2', '2L ', '2R ', ' B2', ' D2', ' F2', '2L ')
-            self.myperms2['Bar-WW'] = (' F ', '2R ', ' F2', ' D2', ' B2', '2L ', '2R ', ' B2', ' D2', ' F2', '2L ', " F'")
+            self.myperms2['L2NA-'] = ('2F2', ' R2', "2F'", ' U2', "2F'", ' U2', ' R2', "2F'", ' R2', '2F ', ' R2', "2F'", ' R2', '2F2', ' R2')
+            self.myperms2['L2NA1-'] = ('2B2', ' D2', '2F ', ' U2', '2B ', ' L2', "2F'", ' L2', ' U2', "2B'", ' R2', '2F ', ' R2', ' D2', '2B2')
+            self.myperms2['L2NA2-'] = ('2B2', ' D2', ' R2', "2F'", ' R2', '2B ', ' U2', ' L2', '2F ', ' L2', "2B'", ' U2', "2F'", ' D2', '2B2')
+            self.myperms2['L2OA-'] = ('2B2', ' U2', "2B'", ' U2', ' D2', '2F ', ' D2', ' U2', "2B'", ' U2', '2B2')
+            self.myperms2['L2ZA-'] = ("2F'", ' U2', "2F'", ' U2', ' R2', "2F'", ' R2', "2F'", ' L2', '2B2', ' L2', '2F ', ' U2', '2F2', ' U2')
 
-            self.myperms2['Bar-KA'] = ("2L'", ' B2', ' D2', ' F2', '2R2', ' F2', ' D2', ' B2', "2L'")
-            self.myperms2['Bar-KB'] = ("2L ", ' B2', ' D2', ' F2', '2R2', ' F2', ' D2', ' B2', "2L ")
+            self.myperms2['L2E-NB0-'] = ('2F ', " D'", '2L ', ' D ', ' R2', " D'", "2L'", ' D ', ' R2', '2F ', ' D ', '2R2', " D'", ' R2', ' D ', '2R2', ' D ', '2F ', ' D2', '2F2', ' R2', '2B ', ' U2', '2F2', ' U2', ' R2', "2B'", ' R2')
+            self.myperms2['L2E-OB0-'] = (" R "," B ","2R'"," U2","2R'"," U2"," B2","2R'"," B2","2R'"," F2","2L2"," F2","2R "," U2","2R2"," U2"," B'"," R'")
+            self.myperms2['L2E-ZB0-'] = (" R "," B ","2R2"," U2","2R "," U2"," D2","2L'"," U2"," D2","2R "," U2","2R2"," B'"," R'")
+            self.myperms2['L2E-ZB1-'] = self.invert_moves(self.myperms2['L2E-ZB0-'])
+            self.myperms2['L2E-OB1-'] = self.invert_moves(self.myperms2['L2E-OB0-'])
 
-            self.myperms2['Bar-JA'] = ("2R "," U2"," F2"," D2","2L'"," D2"," F2"," U2","2R2")
-            self.myperms2['Bar-JB'] = ("2R2"," U2"," F2"," D2","2L "," D2"," F2"," U2","2R'")
 
-            self.myperms2['Bar-IA'] = (" B2","2R "," U2"," F2"," D2","2L'"," D2"," F2"," U2","2R2"," B2")
-            self.myperms2['Bar-IB'] = (" B2","2R2"," U2"," F2"," D2","2L "," D2"," F2"," U2","2R'"," B2")
+            self.myperms2['L2E-NC0-'] = ('2B ', " U'", '2R ', ' U ', ' L2', " U'", "2R'", ' U ', ' L2', '2B ', ' U ', "2L'", " U'", ' R2', ' U ', '2L ', ' U ', "2B'", ' U2', '2B2', ' R2', '2B ', ' U2', '2B2', ' U2', ' R2', '2B ', ' R2')
+            self.myperms2['L2E-ZC0-'] = (" U'", '2L ', ' F2', '2L ', ' F2', ' U2', '2L ', ' U2', '2L ', ' D2', '2R2', ' D2', "2L'", ' F2', '2L2', ' F2', ' U ')
+            self.myperms2['L2E-OC0-'] = (" U'", '2L2', ' F2', "2L'", ' F2', ' B2', '2R ', ' F2', ' B2', "2L'", ' F2', '2L2', ' U ')
+            self.myperms2['L2E-OC1-'] = self.invert_moves(self.myperms2['L2E-OC0-'])            
+            self.myperms2['L2E-ZC1-'] = self.invert_moves(self.myperms2['L2E-ZC0-'])
 
-            self.myperms2['SuperBar-3III-A'] = (" R'","2D "," F "," B'","2R "," U2"," F2"," D2","2L'"," D2"," F2"," U2","2R2"," B "," F'","2D'"," R ")
-            self.myperms2['SuperBar-3OOO-A'] = (" R'","2U'"," F "," B'","2L'"," U2"," F2"," D2","2R "," D2"," F2"," U2","2L2"," B "," F'","2U "," R ")
-            self.myperms2['SuperBar-3IIO-A'] = (" R ","2D "," F "," B'","2R "," U2"," F2"," D2","2L'"," D2"," F2"," U2","2R2"," B "," F'","2D'"," R'")
-            self.myperms2['SuperBar-3OOI-A'] = (" R ","2U'"," F "," B'","2L'"," U2"," F2"," D2","2R "," D2"," F2"," U2","2L2"," B "," F'","2U "," R'")
 
-            self.myperms2['SuperBar-3III-B'] = self.invert_moves(self.myperms2['SuperBar-3III-A'])
-            self.myperms2['SuperBar-3OOO-B'] = self.invert_moves(self.myperms2['SuperBar-3OOO-A'])
-            self.myperms2['SuperBar-3IIO-B'] = self.invert_moves(self.myperms2['SuperBar-3IIO-A'])
-            self.myperms2['SuperBar-3OOI-B'] = self.invert_moves(self.myperms2['SuperBar-3OOI-A'])
+            self.myperms2['L2ND-'] = ('2F2', ' D2', '2F ', ' D2', "2F'", ' D2', '2F ', ' D2', ' R2', '2F ', ' R2', '2F ', ' D2', '2F2', ' D2')
+            self.myperms2['L2OD-'] = ('2B2', ' U2', "2B'", ' U2', '2B ', ' U2', "2B'", ' U2', "2B'", ' U2', '2B ', ' L2', "2B'", ' L2', '2B ', ' U2')
+            self.myperms2['L2ZD-'] = (' R2', '2B ', ' D2', "2B'", ' D2', ' R2', '2B ', ' L2', '2B ', ' L2', '2B ', ' L2', '2B2', ' L2')
+
 
             
-            self.myperms2['Bar-X'] = ("2L2"," F2"," U2"," F2","2L2"," F2"," U2"," F2")
-            self.myperms2['Bar-Y'] = (" F2"," U2"," F2","2L2"," F2"," U2"," F2","2L2")
-            self.myperms2['Bar-Z'] = (" U ","2L2"," F2"," U2"," F2","2L2"," F2"," U2"," F2"," U'")
-            self.myperms2['Bar-XX'] = ("2R2"," F2"," B2","2L2"," F2"," B2")
-            self.myperms2['Bar-ZZ'] = (" U ","2R2"," F2"," B2","2L2"," F2"," B2"," U'")
+            self.myperms2['L2XA-'] = ('2B2', ' L2', ' U2', '2B2', ' U2', ' L2', '2B2')
+            self.myperms2['L2XA1-'] = ('2B2', ' R2', ' D2', '2F2', ' D2', ' R2', '2B2')
+            self.myperms2['L2FA-'] = ('2B ', ' L2', '2F2', ' D2', '2F ', ' D2', '2F ', ' L2', '2B2', ' U2', '2B ', ' U2')
+            self.myperms2['L2FA1-'] = ('2B ', ' L2', '2F2', ' D2', '2F ', ' D2', "2B'", ' L2', '2F2', ' U2', "2F'", ' U2')
+            self.myperms2['L2HA-'] = (" R2",'2F ', ' R2', '2B ', ' R2', ' L2', '2F ', "2B'", ' L2', ' R2', '2B ', ' R2', '2B '," R2")
 
+            self.myperms2['L2HD-'] = (' L2', '2B2', ' L2', ' U2', '2B2', ' U2', ' L2', '2B2', ' L2')
+            self.myperms2['L2FD-'] = (" L2","2B "," L2","2F2"," D2","2F "," D2","2F "," L2","2B2"," U2","2B "," U2"," L2")
+            self.myperms2['L2FD1-'] = (' U2', '2F ', ' U2', '2B2', ' R2', '2B ', ' R2', "2F'", ' U2', '2B2', ' L2', "2B'", ' L2', ' U2')
+            self.myperms2['L2XD-'] = ('2F ', ' U2', '2B ', ' U2', ' D2', '2F ', "2B'", ' D2', ' U2', '2B ', ' U2', '2B ')
+
+
+            self.myperms2['L2E-HB0-'] = ("2R'", ' F2', " D'", '2F2', ' D ', ' F2', " D'", '2F2', ' D ', ' F2', ' D ', "2B'", " D'", ' F2', ' D ', '2B ', " D'", '2R ')
+
+
+            self.myperms2['L2E-XB0-'] = ("2R'", ' F2', ' D ', "2B'", " D'", ' F2', ' D ', '2B ', " D'", ' F2', " D'", '2F2', ' D ', ' F2', " D'", '2F2', ' D ', '2R ')
+          
+            self.myperms2['L2E-FB0-'] = (" R "," B ","2L "," F2","2R2"," D2","2R "," D2","2R "," F2","2L2"," U2","2L "," U2"," B'"," R'")
+
+            self.myperms2['L2E-XC0-'] = ('2R ', ' F2', ' D ', '2F2', " D'", ' F2', ' D ', '2F2', " D'", ' F2', " D'", '2B ', ' D ', ' F2', " D'", "2B'", ' D ', "2R'")
+
+            self.myperms2['L2E-HC0-'] = ('2R ', ' F2', " D'", '2B ', ' D ', ' F2', " D'", "2B'", ' D ', ' F2', ' D ', '2F2', " D'", ' F2', ' D ', '2F2', " D'", "2R'")
+   
+            self.myperms2['L2E-FC0-'] = (" U'", "2R'", ' D2', '2L2', ' B2', "2L'", ' B2', "2L'", ' D2', '2R2', ' F2', "2R'", ' F2', ' U ')
+            self.myperms2['L2E-FC1-'] = self.invert_moves(self.myperms2['L2E-FC0-'])
+
+            self.myperms2['Edge6A'] = ("2L ", "2R'", " D2", "2L'", "2R ", " D2")
+            self.myperms2['Edge6B'] = (" U'", "2L'", "2R ", ' U ', ' F2', " U'", "2L ", "2R'", ' U ', ' F2')
+            self.myperms2['Edge6C'] = (" F'", "2U ", "2D'", " F'", ' D2', ' F ', "2U'", "2D ", " F'", ' D2', ' F2')
+            self.myperms2['Edge6D'] = (' D2', " B'", "2L ", "2R'", ' B ', ' D2', " B'", "2L'", "2R ", ' B ')            
+            self.myperms2['Edge6E'] = ('2L2', ' B2', "2R'", ' F2', "2L'", ' U2', '2R ', ' U2', ' F2', '2L ', ' D2', "2R'", '2L2', ' D2', ' B2', '2L2')
+            self.myperms2['Edge6F'] = ('2L2', ' F2', '2L ', ' D2', '2L ', ' D2', ' F2', '2L ', ' F2', "2L'", ' F2', '2L ', ' D2', '2L2', ' D2', ' F2', '2L2', ' F2')
+            self.myperms2['Edge6G'] = ('2R ', ' F2', "2R'", '2L ', ' F2', ' U2', ' B2', '2R ', ' B2', ' U2', '2R2', ' D2', '2R ', ' F2', "2L'", ' U2', '2R ', ' U2', ' F2', '2L ', ' D2', '2R ')
+            self.myperms2['Edge6H'] = ('2L ', "2R'", ' D2', '2R ', "2L'", ' D2', '2L2', ' B2', "2R'", ' F2', '2L ', ' F2', ' U2', '2L ', ' U2', "2L'", ' U2', '2R ', ' U2', ' B2', '2L2')
+            
+            self.myperms2['Edge6PAX'] = (" U'", "2L ", "2R'", ' U ', ' F2', " U'", "2L'", "2R ", ' U ', ' F2') + ("2R2"," U2"," F2","2R2"," F2"," U2","2R2")
+            self.myperms2['Edge6PBX'] = (" U'", "2L2", "2R2", ' U ', ' F2', " U'", "2L2", "2R2", ' U ', ' F2') + ("2R2"," U2"," F2","2R2"," F2"," U2","2R2")
+            self.myperms2['Edge6PCX'] = (' D2', " B'", "2L'", "2R ", ' B ', ' D2', " B'", "2L ", "2R'", ' B ') + ("2R2"," F2"," D2","2R2"," D2"," F2","2R2")
+            self.myperms2['Edge6PDX'] = (' D2', " B'", "2L2", "2R2", ' B ', ' D2', " B'", "2L2", "2R2", ' B ') + ("2R2"," F2"," D2","2R2"," D2"," F2","2R2")
+        
+            self.myperms2['Edge6PAN'] = (" U'", "2L ", "2R'", ' U ', ' F2', " U'", "2L'", "2R ", ' U ', ' F2') + ('2R2', ' U2', "2R'", ' F2', "2R'", ' F2', ' U2', "2R'", ' U2', '2R ', ' U2', "2R'", ' U2', '2R2', ' U2')
+            self.myperms2['Edge6PBN'] = (" U'", "2L2", "2R2", ' U ', ' F2', " U'", "2L2", "2R2", ' U ', ' F2') + ('2R2', ' U2', "2R'", ' F2', "2R'", ' F2', ' U2', "2R'", ' U2', '2R ', ' U2', "2R'", ' U2', '2R2', ' U2')
+            self.myperms2['Edge6PCN'] = (' D2', " B'", "2L'", "2R ", ' B ', ' D2', " B'", "2L ", "2R'", ' B ') + ('2R2', ' F2', "2R'", ' D2', "2R'", ' D2', ' F2', "2R'", ' F2', '2R ', ' F2', "2R'", ' F2', '2R2', ' F2')
+            self.myperms2['Edge6PDN'] = (' D2', " B'", "2L2", "2R2", ' B ', ' D2', " B'", "2L2", "2R2", ' B ') + ('2R2', ' F2', "2R'", ' D2', "2R'", ' D2', ' F2', "2R'", ' F2', '2R ', ' F2', "2R'", ' F2', '2R2', ' F2')
+
+
+            self.myperms2['EdgePK-A00-'] = ("2F'", ' L ', '2D ', " L'", ' U2', ' L ', "2D'", " L'", ' U2', '2F ')
+            self.myperms2['EdgePK-A01-'] = ("2F'", ' U2', ' L ', '2D ', " L'", ' U2', ' L ', "2D'", " L'", '2F ')
+            self.myperms2['EdgePK-A02-'] = ("2F'", " L'", '2U ', ' L ', ' U2', " L'", "2U'", ' L ', ' U2', '2F ')
+            self.myperms2['EdgePK-A03-'] = ("2F'", ' U2', " L'", '2U ', ' L ', ' U2', " L'", "2U'", ' L ', '2F ')
+            self.myperms2['EdgePK-A04-'] = ('2F2', ' R2', " D'", "2L'", ' D ', ' R2', " D'", '2L ', ' D ', '2F2')
+            self.myperms2['EdgePK-A05-'] = ('2F2', " D'", "2L'", ' D ', ' R2', " D'", '2L ', ' D ', ' R2', '2F2')
+            self.myperms2['EdgePK-A06-'] = ('2F2', ' R2', ' D ', "2R'", " D'", ' R2', ' D ', '2R ', " D'", '2F2')
+            self.myperms2['EdgePK-A07-'] = ('2F2', ' D ', "2R'", " D'", ' R2', ' D ', '2R ', " D'", ' R2', '2F2')
+            self.myperms2['EdgePK-A08-'] = ('2B2', ' R2', ' D ', '2L ', " D'", ' R2', ' D ', "2L'", " D'", '2B2')
+            self.myperms2['EdgePK-A09-'] = ('2B2', ' D ', '2L ', " D'", ' R2', ' D ', "2L'", " D'", ' R2', '2B2')
+                        
+            self.myperms2['EdgePK-D00-'] = (" L2","2F'", ' L ', '2D ', " L'", ' U2', ' L ', "2D'", " L'", ' U2', '2F '," L2")
+            self.myperms2['EdgePK-D01-'] = (" L2","2F'", ' U2', ' L ', '2D ', " L'", ' U2', ' L ', "2D'", " L'", '2F '," L2")
+            self.myperms2['EdgePK-D02-'] = (" L2","2F'", " L'", '2U ', ' L ', ' U2', " L'", "2U'", ' L ', ' U2', '2F '," L2")
+            self.myperms2['EdgePK-D03-'] = (" L2","2F'", ' U2', " L'", '2U ', ' L ', ' U2', " L'", "2U'", ' L ', '2F '," L2")
+            self.myperms2['EdgePK-D04-'] = (" R2",'2F2', ' R2', " D'", "2L'", ' D ', ' R2', " D'", '2L ', ' D ', '2F2'," R2")
+            self.myperms2['EdgePK-D05-'] = (" R2",'2F2', " D'", "2L'", ' D ', ' R2', " D'", '2L ', ' D ', ' R2', '2F2'," R2")
+            self.myperms2['EdgePK-D06-'] = (" R2",'2F2', ' R2', ' D ', "2R'", " D'", ' R2', ' D ', '2R ', " D'", '2F2'," R2")
+            self.myperms2['EdgePK-D07-'] = (" R2",'2F2', ' D ', "2R'", " D'", ' R2', ' D ', '2R ', " D'", ' R2', '2F2'," R2")
+            self.myperms2['EdgePK-D08-'] = (" R2",'2B2', ' R2', ' D ', '2L ', " D'", ' R2', ' D ', "2L'", " D'", '2B2'," R2")
+            self.myperms2['EdgePK-D09-'] = (" R2",'2B2', ' D ', '2L ', " D'", ' R2', ' D ', "2L'", " D'", ' R2', '2B2'," R2")
+
+
+
+
+            self.myperms2['SideLA-'] = ('2L ', ' U2', "2R'", ' F2', '2R ', ' F2', ' U2', ' B2', "2R'", ' D2', '2R2', ' D2', "2R'", ' B2')
+            self.myperms2['SideLB-'] = self.invert_moves(self.myperms2['SideLA-'])
+            self.myperms2['SideLC-'] = ('2L ', ' F2', '2L ', ' F2', '2L ', ' F2', '2L2', ' B2', "2L'", ' F2', '2L ', ' B2')
+            self.myperms2['SideLD-'] = self.invert_moves(self.myperms2['SideLC-'])
+            self.myperms2['SideLE-'] = ("2R'", ' B2', ' U2', '2R ', ' U2', "2R'", ' U2', '2R2', '2L ', ' U2', "2L'", ' B2', '2R2')
+            self.myperms2['SideLF-'] = self.invert_moves(self.myperms2['SideLE-'])
+
+            self.myperms2['SideLG-'] = (' F2', ' U2', ' F ', "2U'", " F'", ' U2', ' F ', '2U2', ' F ', ' U2', " F'", "2U'", ' F ', ' U2')
+            self.myperms2['SideLH-'] = ('2R2', ' B2', "2R'", ' B2', "2R'", ' U2', '2L2', ' F2', "2L'", ' F2', "2L'", ' U2')
+            self.myperms2['SideLI-'] = ('2R ', ' B2', "2L'", ' B2', '2L2', ' F2', "2L'", ' U2', '2L ', ' U2', '2L ', ' F2', '2L2', ' U2', "2R'", ' U2')
+
+            self.myperms2['SideRA-'] = (" F2",'2L2', ' F2', '2L ', ' B2', "2L'", ' B2', ' F2', ' U2', "2L'", ' U2', '2R ', ' B2', "2R'", ' B2', '2L2'," F2")
+            self.myperms2['SideRB-'] = self.invert_moves(self.myperms2['SideRA-'])
+            self.myperms2['SideRC-'] = ('2L ', ' B2', '2L ', ' B2', ' D2', '2L ', '2R ', ' D2', "2R'", ' D2', "2L'", ' D2', "2L'")
+            self.myperms2['SideRD-'] = self.invert_moves(self.myperms2['SideRC-'])
+            self.myperms2['SideRE-'] = ('2L2', ' U2', "2L'", ' U2', "2L'", "2R'", ' D2', ' B2', '2R ', ' B2', ' D2', '2R ')
+            self.myperms2['SideRF-'] = self.invert_moves(self.myperms2['SideRE-'])
+
+            self.myperms2['SideRG-'] = ('2L2', ' D2', '2L ', ' B2', "2L'", ' B2', "2L'", ' D2', '2L2', ' B2', '2R ', ' B2', "2R'", ' U2', '2L ', ' U2')
+            self.myperms2['SideRH-'] = ("2R'", ' B2', '2R2', ' F2', "2R'", ' D2', '2R ', ' D2', '2R ', ' F2', '2R2', ' D2', "2L'", ' D2', '2L ', ' B2')
+            self.myperms2['SideRI-'] = ("2L'", ' U2', '2L ', ' U2', '2L ', ' F2', '2L2', ' U2', "2R'", ' U2', '2R ', ' B2', "2L'", ' B2', '2L2', ' F2')
+
+
+            self.myperms2['SideSA-'] = (" U2",'2L ', ' U2', "2R'", ' F2', '2R ', ' F2', ' U2', ' B2', "2R'", ' D2', '2R2', ' D2', "2R'", ' B2'," U2")
+            self.myperms2['SideSB-'] = (" U2",'2L ', ' F2', '2L ', ' F2', '2L ', ' F2', '2L2', ' B2', "2L'", ' F2', '2L ', ' B2'," U2")
+            self.myperms2['SideSC-'] = ("2R'", ' U2', "2R'", ' U2', "2R'", ' F2', ' D2', ' B2', '2L ', ' B2', ' D2', ' F2', "2R'")
+            self.myperms2['SideSD-'] = self.invert_moves(self.myperms2['SideSC-'])
+
+            self.myperms2['SideSE-'] = ("2L'", ' B2', "2R'", ' B2', ' D2', "2R'", ' D2', '2R ', ' D2', "2L'", ' D2', ' F2', "2R'", ' F2', '2R ', ' U2', "2L'", ' U2', ' F2', "2L'", ' F2', "2L'")
+            self.myperms2['SideSF-'] = ('2L ', ' F2', '2L ', ' F2', '2L2', ' U2', '2R ', ' B2', '2R ', ' B2', '2R2', ' U2')
+            self.myperms2['SideSG-'] = ('2L ', ' F2', '2R2', ' U2', "2R'", ' F2', "2R'", ' F2', '2R ', ' U2', '2R2', ' D2', '2R ', ' D2', "2L'", ' F2')
+
+            self.myperms2['SideTA-'] = ('2L2', ' F2', '2L ', ' B2', "2L'", ' B2', ' F2', ' U2', "2L'", ' U2', '2R ', ' B2', "2R'", ' B2', '2L2')
+            self.myperms2['SideTB-'] = ('2R2', ' D2', "2R'", ' B2', '2R2', ' B2', ' D2', ' B2', '2R ', ' B2', ' D2', '2R ', ' D2')
+            self.myperms2['SideTC-'] = self.invert_moves(self.myperms2['SideTB-'])
+
+            self.myperms2['SideTD-'] = ('2R ', ' B2', "2R'", ' B2', "2R'", ' U2', '2L2', ' F2', "2L'", ' F2', "2L'", ' U2',"2R ")
+            self.myperms2['SideTE-'] = ('2R2', ' D2', '2L ', ' D2', "2L'", ' F2', '2L2', ' F2', '2L ', ' D2', "2L'", ' D2', '2R2')
+            
+            self.myperms2['SideKKA-'] = ("2R "," U2","2R "," U2","2R "," U2","2R "," U2","2R ")
+            self.myperms2['SideKKB-'] = ("2L'", ' D2', "2L'", ' D2', '2L ', ' B2', '2L2', ' D2', "2L'", ' D2', "2L'", ' B2')
+            self.myperms2['SideKKC-'] = ('2R ', ' U2', '2R ', ' U2', '2R2', ' B2', "2R'", ' U2', '2R ', ' U2', '2R ', ' B2')
+
+            self.myperms2['SideKKD-'] = (' U2', '2R ', ' U2', ' F2', ' B2', ' D2', '2L ', ' D2', ' B2', ' F2')
+            self.myperms2['SideKKE-'] = (" D'", "2F'", ' D ', ' B2', " D'", '2F ', ' D ', " U'", "2F'", ' U ', ' B2', " U'", '2F ', ' U ')
+            self.myperms2['SideKKF-'] = (' F2', "2L'", ' B2', '2L ', ' F2', "2L'", ' B2', '2L ', '2R ', ' F2', "2R'", ' B2', '2R ', ' F2', "2R'", ' B2')
+            
+            self.myperms2['SideJJA-'] = ('2R2', ' U2', '2L ', ' U2', "2L'", ' B2', '2R ', ' B2', ' U2', '2R2', ' D2', "2R'", ' U2', '2R ', ' D2')
+            self.myperms2['SideJJB-'] = ("2R'", ' U2', ' D2', "2R'", ' U2', "2R ", ' D2', '2R2', ' U2', "2R'", ' U2', "2R'")
+            self.myperms2['SideJJC-'] = self.invert_moves(self.myperms2['SideJJB-'])
+
+            self.myperms2['SideJJD-'] = ('2L ', ' D2', '2L ', ' D2', '2L ', ' B2', '2R2', ' U2', '2R ', ' U2', '2R ', ' B2', '2L ')
+            self.myperms2['SideJJE-'] = ("2R'", ' U2', ' D2', "2R'", ' U2', '2R ', ' D2', '2R2', ' U2', "2R'", ' U2', '2R2', ' U2', ' D2', "2R'", ' U2', '2R ', ' D2', '2R2', ' U2', "2R'", ' U2', "2R'")
+            
+            self.myperms2['SideIIA-'] = (" U2","2R "," U2","2R "," U2","2R "," U2","2R "," U2","2R "," U2")
+            self.myperms2['SideIIB-'] = (' U2', '2R ', ' U2', '2R ', ' U2', '2R ', ' U2', '2R ', ' U2', '2R ', "2L'", ' U2', '2L ', ' F2', ' U2', '2R ', ' U2', "2R'", ' F2')
+
+            self.myperms2['SideIIC-'] = ("2R'", ' B2', ' U2', ' D2', ' F2', "2L'", ' F2', ' D2', ' U2', ' B2')
+            self.myperms2['SideIID-'] = ('2L2', ' B2', "2R'", ' B2', '2R ', ' D2', "2L'", ' D2', ' B2', "2L'", ' B2', ' F2', '2L ', ' F2', ' U2', '2L ', ' U2', "2R'", ' F2', '2R ', ' F2', '2L2')
+            
+            self.myperms2['SideSSA-'] = ('2R ', ' U2', '2R2', ' B2', "2R'", ' B2', '2R2', ' F2', ' D2', '2L ', ' D2', ' F2', ' U2')
+            self.myperms2['SideSSB-'] = (' F2', '2R ', ' F2', '2L ', ' D2', "2L'", ' D2', "2R'", ' F2', '2L ', ' F2', "2L'", ' U2', '2R ', ' U2')
+
+            self.myperms2['SideSSC-'] = self.myperms2['SideSSA-'] * 2
+            self.myperms2['SideSSD-'] = ('2R2', ' U2', ' B2', '2R ', "2L'", ' B2', "2R'", '2L ', ' B2', '2R2', ' B2', ' U2')
             
 
         self.myperms2['E-Perm'] = (" R "," B'"," R'"," F "," R "," B "," R'"," F'"," R "," B "," R'"," F "," R "," B'"," R'"," F'")
@@ -4901,53 +4308,593 @@ class Rubiks_3:
         self.myperms2['EZ-H'] = self.conjugate((" F "," U "," L'"),self.myperms2['EZ-A'])   
         
 
-        
-
-
-        self.myperms2['K00-'] = (' D2', ' L ', ' B ', " L'", ' D2', ' R ', " F'", ' R ', ' F ', ' R2', ' F2', ' D2', ' F ', ' U2', " F'", ' D2', ' F ', ' U2', ' F ')
-        self.myperms2['K01-'] = (' R2', " D'", ' R ', ' U2', " R'", ' D ', ' R ', ' U2', ' R ', " U'", " L'", ' U ', ' R2', " U'", ' L ', ' U ', ' R2', ' U ', ' R ', " U'", ' R ', ' U ', ' R ', " U'", ' R2')
-        self.myperms2['K02-'] = (" B'", ' R2', " B'", ' D2', ' L2', ' F2', ' L2', ' D2', ' B ', ' R2', ' D2', " L'", " F'", ' L ', ' D2', " R'", ' B ', ' R ')
-        self.myperms2['K03-'] = (' B2', ' D ', " B'", ' U2', ' B ', " D'", " B'", ' U2', ' L ', " B'", " U'", ' L ', ' F ', ' U ', ' L2', " U'", ' L ', ' F ', ' L ', " F'", ' L2', ' U ')
-        self.myperms2['K04-'] = (' U2', ' F ', ' L2', " B'", ' U2', ' B ', ' U2', ' F2', ' L2', " F'", ' L2', ' F ', ' L2', ' U2', ' F2', ' U2', ' B ', ' L2', ' U2', ' R2', ' F ', ' D2', ' R2')
-        self.myperms2['K05-'] = (' D ', ' R ', " D'", ' U ', ' F2', " U'", ' D ', " R'", ' D2', ' B2', ' D2', " B'", ' D2', ' B ', ' D2', " B'", ' D2', ' R2', " B'", ' R2', " B'", ' D2', ' B2', " D'")
-        self.myperms2['K06-'] = (' U2', " B'", ' L2', ' F ', ' U2', " F'", ' U2', ' B2', ' L2', ' B ', ' L2', " B'", ' L2', ' U2', ' B2', ' D2', " B'", ' D2', ' R2', ' U2', " F'", ' U2', ' R2')
-        self.myperms2['K07-'] = (' D ', " R'", ' D ', " U'", ' B2', " D'", ' U ', ' R ', ' D2', ' B2', ' D2', " B'", ' D2', ' B ', ' D2', " B'", ' D2', ' R2', " B'", ' R2', " B'", ' D2', ' B2', " D'")
-        self.myperms2['K08-'] = (' F2', ' D2', ' B ', ' U2', " B'", ' F ', ' R2', ' L2', ' F ', ' L2', ' D2', ' F ', ' D2', " F'", ' D2', ' F ', ' D2', ' F2', ' D2', ' L2')
-        self.myperms2['K09-'] = self.conjugate((" L "," R'"),self.myperms2['EZ-H'])
+        self.myperms2['CornerEdgeBlockSwap-K00-'] = (' D2', ' L ', ' B ', " L'", ' D2', ' R ', " F'", ' R ', ' F ', ' R2', ' F2', ' D2', ' F ', ' U2', " F'", ' D2', ' F ', ' U2', ' F ')
+        self.myperms2['CornerEdgeBlockSwap-K01-'] = (' R2', " D'", ' R ', ' U2', " R'", ' D ', ' R ', ' U2', ' R ', " U'", " L'", ' U ', ' R2', " U'", ' L ', ' U ', ' R2', ' U ', ' R ', " U'", ' R ', ' U ', ' R ', " U'", ' R2')
+        self.myperms2['CornerEdgeBlockSwap-K02-'] = (" B'", ' R2', " B'", ' D2', ' L2', ' F2', ' L2', ' D2', ' B ', ' R2', ' D2', " L'", " F'", ' L ', ' D2', " R'", ' B ', ' R ')
+        self.myperms2['CornerEdgeBlockSwap-K03-'] = (' B2', ' D ', " B'", ' U2', ' B ', " D'", " B'", ' U2', ' L ', " B'", " U'", ' L ', ' F ', ' U ', ' L2', " U'", ' L ', ' F ', ' L ', " F'", ' L2', ' U ')
+        self.myperms2['CornerEdgeBlockSwap-K04-'] = (' U2', ' F ', ' L2', " B'", ' U2', ' B ', ' U2', ' F2', ' L2', " F'", ' L2', ' F ', ' L2', ' U2', ' F2', ' U2', ' B ', ' L2', ' U2', ' R2', ' F ', ' D2', ' R2')
+        self.myperms2['CornerEdgeBlockSwap-K05-'] = (' D ', ' R ', " D'", ' U ', ' F2', " U'", ' D ', " R'", ' D2', ' B2', ' D2', " B'", ' D2', ' B ', ' D2', " B'", ' D2', ' R2', " B'", ' R2', " B'", ' D2', ' B2', " D'")
+        self.myperms2['CornerEdgeBlockSwap-K06-'] = (' U2', " B'", ' L2', ' F ', ' U2', " F'", ' U2', ' B2', ' L2', ' B ', ' L2', " B'", ' L2', ' U2', ' B2', ' D2', " B'", ' D2', ' R2', ' U2', " F'", ' U2', ' R2')
+        self.myperms2['CornerEdgeBlockSwap-K07-'] = (' D ', " R'", ' D ', " U'", ' B2', " D'", ' U ', ' R ', ' D2', ' B2', ' D2', " B'", ' D2', ' B ', ' D2', " B'", ' D2', ' R2', " B'", ' R2', " B'", ' D2', ' B2', " D'")
+        self.myperms2['CornerEdgeBlockSwap-K08-'] = (' F2', ' D2', ' B ', ' U2', " B'", ' F ', ' R2', ' L2', ' F ', ' L2', ' D2', ' F ', ' D2', " F'", ' D2', ' F ', ' D2', ' F2', ' D2', ' L2')
+        self.myperms2['CornerEdgeBlockSwap-K09-'] = self.conjugate((" L "," R'"),self.myperms2['EZ-H'])
 
 
         
-        self.myperms2['J00-'] = (' L2', ' U2', ' F ', ' U ', " F'", ' U ', ' L2', " D'", ' B ', ' D ')
-        self.myperms2['J01-'] = (' D2', " R'", " U'", ' R ', ' D2', " R'", ' U ', ' F2', " L'", " U'", ' L ', ' F2', " R'", ' D ', " R'", " D'", " R'")
-        self.myperms2['J02-'] = (' U ', " B'", ' U ', ' R2', " D'", ' F ', ' D ', ' R2', ' F ', ' U2', ' B ', ' U2', " F'", ' U2')
-        self.myperms2['J03-'] = (' U2', ' L ', ' D ', " L'", ' U2', ' L ', " D'", ' L2', ' F2', ' R ', ' U ', " R'", ' F2', ' L ', " D'", ' L ', ' D ', " L'")
-        self.myperms2['J04-'] = (' L2', ' U2', " F'", ' L2', ' D2', ' R2', ' B2', ' D2', ' L2', " U'", " F'", ' U ', ' L2', " D'", ' B ', ' D ')
-        self.myperms2['J05-'] = (' R2', " D'", " F'", ' D ', ' F ', ' D ', " R'", ' D2', ' F ', ' D ', ' F ', " D'", " F'", ' D ', ' B2', ' L2', ' U ', ' L2', ' B2', ' R2', ' D ', ' R ')
-        self.myperms2['J06-'] = (" D'", " B'", ' D ', ' L2', " U'", ' F ', ' U ', ' L2', ' D2', ' B ', ' D2', ' U2', ' L2', ' D2', ' F ', ' R2', ' D2', ' L2', ' B ')
-        self.myperms2['J07-'] = (" L'", ' U2', ' L2', ' R2', " D'", ' L2', ' D ', ' L2', ' R2', " U'", ' L2', " U'", ' L ', ' R ', " D'", ' F ', ' D ', " F'", " D'", " F'", ' D2', ' R ', " D'", " F'", " D'", ' F ', ' D ', ' R2')
-        self.myperms2['J08-'] = self.conjugate((" F "," B "),self.myperms2['EZ-G'])
-        self.myperms2['J09-'] = self.conjugate((" L "," R "),self.myperms2['EZ-H'])        
-        self.myperms2['J10-'] = self.conjugate((" F2",),self.myperms2['EZ-G'])
-        self.myperms2['J11-'] = self.conjugate((" L2",),self.myperms2['EZ-H'])
+        self.myperms2['CornerEdgeBlockSwap-J00-'] = (' L2', ' U2', ' F ', ' U ', " F'", ' U ', ' L2', " D'", ' B ', ' D ')
+        self.myperms2['CornerEdgeBlockSwap-J01-'] = (' D2', " R'", " U'", ' R ', ' D2', " R'", ' U ', ' F2', " L'", " U'", ' L ', ' F2', " R'", ' D ', " R'", " D'", " R'")
+        self.myperms2['CornerEdgeBlockSwap-J02-'] = (' U ', " B'", ' U ', ' R2', " D'", ' F ', ' D ', ' R2', ' F ', ' U2', ' B ', ' U2', " F'", ' U2')
+        self.myperms2['CornerEdgeBlockSwap-J03-'] = (' U2', ' L ', ' D ', " L'", ' U2', ' L ', " D'", ' L2', ' F2', ' R ', ' U ', " R'", ' F2', ' L ', " D'", ' L ', ' D ', " L'")
+        self.myperms2['CornerEdgeBlockSwap-J04-'] = (' L2', ' U2', " F'", ' L2', ' D2', ' R2', ' B2', ' D2', ' L2', " U'", " F'", ' U ', ' L2', " D'", ' B ', ' D ')
+        self.myperms2['CornerEdgeBlockSwap-J05-'] = (' R2', " D'", " F'", ' D ', ' F ', ' D ', " R'", ' D2', ' F ', ' D ', ' F ', " D'", " F'", ' D ', ' B2', ' L2', ' U ', ' L2', ' B2', ' R2', ' D ', ' R ')
+        self.myperms2['CornerEdgeBlockSwap-J06-'] = (" D'", " B'", ' D ', ' L2', " U'", ' F ', ' U ', ' L2', ' D2', ' B ', ' D2', ' U2', ' L2', ' D2', ' F ', ' R2', ' D2', ' L2', ' B ')
+        self.myperms2['CornerEdgeBlockSwap-J07-'] = (" L'", ' U2', ' L2', ' R2', " D'", ' L2', ' D ', ' L2', ' R2', " U'", ' L2', " U'", ' L ', ' R ', " D'", ' F ', ' D ', " F'", " D'", " F'", ' D2', ' R ', " D'", " F'", " D'", ' F ', ' D ', ' R2')
+        self.myperms2['CornerEdgeBlockSwap-J08-'] = self.conjugate((" F "," B "),self.myperms2['EZ-G'])
+        self.myperms2['CornerEdgeBlockSwap-J09-'] = self.conjugate((" L "," R "),self.myperms2['EZ-H'])        
+        self.myperms2['CornerEdgeBlockSwap-J10-'] = self.conjugate((" F2",),self.myperms2['EZ-G'])
+        self.myperms2['CornerEdgeBlockSwap-J11-'] = self.conjugate((" L2",),self.myperms2['EZ-H'])
 
-        self.myperms2['JX'] = (' B2', " L'", ' B2', ' D2', " F'", " R'", ' F ', ' D2', " B'", ' L ', ' B ')
-        self.myperms2['JY'] = (' F2', " R'", ' F ', ' D2', " B'", ' L ', ' B ', ' D2', ' F ', " L'", ' F ', ' R ', " F'", ' L ')
-        self.myperms2['JZ'] = (' B2', ' U2', ' B2', ' U2', ' B2', " R'", ' U ', ' F2', " D'", ' L ', ' D ', ' F2', ' U ', " L'", ' U ', ' R ', " U'", ' L ')        
+        self.myperms2['CornerEdgeBlockSwap-JX'] = (' B2', " L'", ' B2', ' D2', " F'", " R'", ' F ', ' D2', " B'", ' L ', ' B ')
+        self.myperms2['CornerEdgeBlockSwap-JY'] = (' F2', " R'", ' F ', ' D2', " B'", ' L ', ' B ', ' D2', ' F ', " L'", ' F ', ' R ', " F'", ' L ')
+        self.myperms2['CornerEdgeBlockSwap-JZ'] = (' B2', ' U2', ' B2', ' U2', ' B2', " R'", ' U ', ' F2', " D'", ' L ', ' D ', ' F2', ' U ', " L'", ' U ', ' R ', " U'", ' L ')        
         
 
-        self.myperms2['Super00-'] = (" U'", " F'", ' U ', ' B ', " U'", ' F ', ' U ', " B'", ' L ', ' D ', " L'", ' U ', ' L ', " D'", ' L2', ' U ', ' L ', " U'", ' F ', ' R ', ' U ', " R'", " F'", " L'", " U'", ' L ')
-        self.myperms2['B00-'] = (" L2"," F2"," U2"," L'"," U2"," L2"," F2"," L'"," U2"," L2"," U2"," F2"," L'"," F2")
-        self.myperms2['F00-'] = (' L ', " F'", ' D2', ' B ', " R'", " B'", ' D2', ' F2', " L'", " F'")
-        self.myperms2['B01-'] = (' R2', ' B2', ' L2', ' D2', ' F2', ' L2', ' B2', ' R2', ' F2', ' U ', ' F2', ' U2', ' R2', ' U ', ' F2', ' U2', ' F2', ' R2', ' U ', ' R2')
-        self.myperms2['F01-'] = (" F "," R2"," F "," R "," U "," R'"," U'"," R'"," F "," R2"," U'"," R'"," U'"," R "," U "," R'"," F2"," R2"," F'")
+        self.myperms2['CornerEdgeBlockSwap-Super00-'] = (" U'", " F'", ' U ', ' B ', " U'", ' F ', ' U ', " B'", ' L ', ' D ', " L'", ' U ', ' L ', " D'", ' L2', ' U ', ' L ', " U'", ' F ', ' R ', ' U ', " R'", " F'", " L'", " U'", ' L ')
+        self.myperms2['CornerEdgeBlockSwap-B00-'] = (" L2"," F2"," U2"," L'"," U2"," L2"," F2"," L'"," U2"," L2"," U2"," F2"," L'"," F2")
+        self.myperms2['CornerEdgeBlockSwap-F00-'] = (' L ', " F'", ' D2', ' B ', " R'", " B'", ' D2', ' F2', " L'", " F'")
+        self.myperms2['CornerEdgeBlockSwap-B01-'] = (' R2', ' B2', ' L2', ' D2', ' F2', ' L2', ' B2', ' R2', ' F2', ' U ', ' F2', ' U2', ' R2', ' U ', ' F2', ' U2', ' F2', ' R2', ' U ', ' R2')
+        self.myperms2['CornerEdgeBlockSwap-F01-'] = (" F "," R2"," F "," R "," U "," R'"," U'"," R'"," F "," R2"," U'"," R'"," U'"," R "," U "," R'"," F2"," R2"," F'")
         
-        self.myperms2['Super05-'] = (' D2', ' B2', ' D2', ' F2', ' U2', ' F2', ' B2', " R'", ' B2', ' D2', ' R2', ' D2', " R'", ' B2', ' R2', ' D2', ' R ', ' D2', ' B2', ' R2')
-        self.myperms2['Super06-'] = (' D2', ' F2', ' B2', ' U2', ' F2', " R'", ' B ', ' U2', " F'", ' L ', ' F ', ' U2', ' B2', ' R ', " B'")
+        self.myperms2['CornerEdgeBlockSwap-Super05-'] = (' D2', ' B2', ' D2', ' F2', ' U2', ' F2', ' B2', " R'", ' B2', ' D2', ' R2', ' D2', " R'", ' B2', ' R2', ' D2', ' R ', ' D2', ' B2', ' R2')
+        self.myperms2['CornerEdgeBlockSwap-Super06-'] = (' D2', ' F2', ' B2', ' U2', ' F2', " R'", ' B ', ' U2', " F'", ' L ', ' F ', ' U2', ' B2', ' R ', " B'")
         
         
+
+    def _register_myperms2_center_general(self):
+        """4x4以上で使うCenter系・Bar系の手順を登録する。"""
+        # 命名メモ:
+        # - X-Center / Plus-Center / Oblique-Center は center の配置 family。
+        # - Adjacent3Center / Line3Center は 3面の center 配置 family。
+        # - OuterCenterBar / MidCenterBar は center の bar を動かす family。
+        if self.size >= 4:
+            self.myperms2['X-Center-XA-'] = ("2R2","2F2","2R2","2F2")
+            self.myperms2['X-Center-XB-'] = (" U ","2R2","2F2","2R2","2F2"," U'")
+            self.myperms2['X-Center-XC-'] = (" U2","2R2","2F2","2R2","2F2"," U2")
+            self.myperms2['X-Center-WA-'] = ('2F2', " D'", '2R2', '2F2', '2R2', '2F2', ' D ', '2F2')
+            self.myperms2['X-Center-WB-'] = ('2B2', " D'", '2L2', '2B2', '2L2', '2B2', ' D ', '2B2')
+            self.myperms2['X-Center-WC-'] = ('2F2', ' U ', '2L2', '2F2', '2L2', '2F2', " U'", '2F2')
+            self.myperms2['X-Center-WD-'] = ('2B2', ' U ', '2R2', '2B2', '2R2', '2B2', " U'", '2B2') 
+            self.myperms2['X-Center-VA-'] = ("2F'", '2U ', '2F ', "2U'", '2F ', "2R'", "2F'", '2R ')
+            self.myperms2['X-Center-VB-'] = ("2F'", '2U ', "2F'", "2U'", '2F ', "2R'", '2F ', '2R ')
+            self.myperms2['X-Center-VC-'] = ("2R'", '2F ', '2R ', "2F'", '2U ', "2F'", "2U'", '2F ')
+            self.myperms2['X-Center-UA-'] = ('2F2', ' U ', '2R2', " U'", '2R2', '2F2', '2R2', ' U ', '2R2', " U'")
+            self.myperms2['X-Center-UB-'] = ('2R2', '2F2', '2R2', '2F2', ' U2', '2R2', '2F2', '2R2', '2F2', ' U2')
+
+
+            
+
+            self.myperms2['X-Center-8-'] = ("2U2","2R2","2U'","2R2","2U'","2R2","2U'","2R2","2U ")      
+            
+            self.myperms2['X-Center-6A-'] = ("2R ","2U ","2R'","2U'")
+            self.myperms2['X-Center-6B-'] = ("2R ","2U'","2R'","2U ")
+            self.myperms2['X-Center-6C-'] = ("2R ","2U2","2R'","2U2")
+            self.myperms2['X-Center-6D-'] = ("2R2","2U'","2R2","2U ")
+            self.myperms2['X-Center-6E-'] = ("2U'","2R ","2U ","2R2","2F ","2R ","2F'")
+            self.myperms2['X-Center-6F-'] = ('2B ', '2D2', '2B ', '2D2', "2L'", "2B'", '2L ', '2U ', "2B'", "2U'")
+            self.myperms2['X-Center-6G-'] = ("2R ","2U ","2R ","2U'","2R2")
+            self.myperms2['X-Center-6H-'] = ("2R ","2U'","2R ","2U ","2R2")
+            self.myperms2['X-Center-6I-'] = ("2R2","2U ","2R'","2U'","2R'")
+            self.myperms2['X-Center-6J-'] = ("2R2","2U'","2R'","2U ","2R'")
+            self.myperms2['X-Center-6K-'] = ("2R2","2U ","2R2","2U ","2R2","2U2","2R2")
+            self.myperms2['X-Center-6L-'] = ("2R2","2U2","2R2","2U ","2R2","2U ","2R2")
+            self.myperms2['X-Center-6M-'] = ("2U ","2R2","2U2","2R2","2U ")
+            self.myperms2['X-Center-6N-'] = ("2F ","2R ","2F2","2R'","2F ")
+            self.myperms2['X-Center-6O-'] = ("2F'","2R ","2F2","2R'","2F'")
+
+            
+
+            self.myperms2['X-Center-4A-'] = ("2R2","2U2","2R'","2U2","2R'")
+            self.myperms2['X-Center-4B-'] = ("2R ","2U2","2R ","2U2","2R2")
+            self.myperms2['X-Center-4C-'] = ("2U ","2F ","2R ","2F'","2R'","2U'")
+            self.myperms2['X-Center-4D-'] = ('2F ', "2D'", '2F2', '2D ', "2F'", '2R2', '2F2', '2R2')
+            self.myperms2['X-Center-4D(1)-'] = ("2D'", "2F'", '2D2', '2F2', '2L ', "2F'", "2L'", "2D'")
+            self.myperms2['X-Center-4D(2)-'] = ("2F'", '2D2', "2B'", '2D2', '2F ', '2D ', '2B ', "2D'")
+            self.myperms2['X-Center-4D(3)-'] = ("2D'", "2F'", '2D ', "2F'", '2R2', '2F ', '2R2', '2F ')
+            self.myperms2['X-Center-4D(4)-'] = ('2F ', "2L'", "2F'", '2L ', "2F'", "2D'", '2F ', '2D ')
+            self.myperms2['X-Center-4XA-'] = ("2L'"," U ","2R'","2D2","2R "," U'","2D2","2L ")
+            self.myperms2['X-Center-4XB-'] = ("2L'"," D'","2R'","2D2","2R "," D ","2D2","2L ")
+            self.myperms2['X-Center-4YA-'] = ("2B "," U'","2R ","2U ","2R'"," U ","2U'","2B'")
+            self.myperms2['X-Center-4YB-'] = ("2B "," D ","2R ","2U ","2R'"," D'","2U'","2B'")
+            self.myperms2['X-Center-4YC-'] = (' D2', '2L ', '2U2', '2L ', '2U2', '2L2', ' D2')
+            self.myperms2['X-Center-4YD-'] = (' U2', '2L ', '2U2', '2L ', '2U2', '2L2', ' U2')
+            self.myperms2['X-Center-4ZA-'] = (" U2","2R ","2U2","2R'"," U2","2R2","2U2","2R2")
+            self.myperms2['X-Center-4ZB-'] = (" D2","2R ","2U2","2R'"," D2","2R2","2U2","2R2")
+            self.myperms2['X-Center-4ZC-'] = (' U2', '2R ', '2U2', "2R'", ' U2', '2L2', '2U2', '2L2')
+            self.myperms2['X-Center-4ZD-'] = (' D2', '2R ', '2U2', "2R'", ' D2', '2L2', '2U2', '2L2')
+            self.myperms2['X-Center-4WA-'] = ('2L ', '2U2', ' D ', '2R ', '2U2', "2R'", " D'", "2L'")
+            self.myperms2['X-Center-4WB-'] = ('2L ', '2U2', " U'", '2R ', '2U2', "2R'", " U ", "2L'")
+
+
+
+            self.myperms2['X-Center-OppX'] = (" U ", '2R2', " U'", '2F2', ' U ', '2R2', " U'", '2F2')
+            self.myperms2['X-Center-OppX(1)'] = (" D'", '2L2', ' D ', '2R2', " D'", '2L2', ' D ', '2R2')
+            self.myperms2['X-Center-OppX(2)'] = ('2R2', '2F ', ' L ', "2F'", '2R2', '2F ', " L'", "2F'")
+            self.myperms2['X-Center-OppX(3)'] = ('2R2', "2B'", ' R ', '2B ', '2R2', "2B'", " R'", '2B ')
+            self.myperms2['X-Center-OppY'] = ('2R2', " U'", '2F2', ' U ', '2R2', " U'", '2F2', ' U ')
+            self.myperms2['X-Center-OppY(1)'] = ('2R2', " D'", '2L2', ' D ', '2R2', " D'", '2L2', ' D ')
+            self.myperms2['X-Center-OppY(2)'] = ('2F ', ' L ', "2F'", '2R2', '2F ', " L'", "2F'", '2R2')
+            self.myperms2['X-Center-OppY(3)'] = ("2B'", ' R ', '2B ', '2R2', "2B'", " R'", '2B ', '2R2')
+            self.myperms2['X-Center-OppZ'] = (" U'", '2R2', " U'", '2F2', ' U ', '2R2', " U'", '2F2', ' U2')
+            self.myperms2['X-Center-OppZ(1)'] = (" U'", '2R2', " U'", '2L2', ' U ', '2R2', " U'", '2L2', ' U2')
+            self.myperms2['X-Center-OppZ(2)'] = ('2R2', " D'", '2F ', '2B ', '2R2', "2F'", "2B'", '2R2', ' D ', '2R2')
+            self.myperms2['X-Center-OppZ(3)'] = ('2R2', " D'", '2R2', '2B ', '2F ', '2R2', "2B'", "2F'", ' D ', '2R2')
+            self.myperms2['X-Center-OppZ(4)'] = ('2F2', ' D ', '2R ', '2L ', '2F2', "2R'", "2L'", '2F2', " D'", '2F2')
+            self.myperms2['X-Center-OppZ(5)'] = ('2F2', ' D ', '2F2', '2L ', '2R ', '2F2', "2L'", "2R'", " D'", '2F2')
+            self.myperms2['X-Center-OppZ(6)'] = ('2B2', " D'", '2F2', ' D ', '2B2', " D'", '2L2', '2F2', '2L2', ' D ')
+            
+
+
+            self.myperms2['X-Center-InOut-Diagonal(0)'] = ("2F'", '2U ', '2F ', " U2", "2F'", "2U'", '2F ', " U2")
+            self.myperms2['X-Center-InOut-Vertical(0)'] = ('2R ', '2U2', "2R'", " U2", '2R ', '2U2', "2R'", " U2")
+            self.myperms2['X-Center-InOut-Diagonal(1)'] = ("2F'", '2U ', '2F ', " D2", "2F'", "2U'", '2F ', " D2")
+            self.myperms2['X-Center-InOut-Vertical(1)'] = ('2R ', '2U2', "2R'", " D2", '2R ', '2U2', "2R'", " D2")
+            self.myperms2['X-Center-InOut-Vertical(2)'] = ("2R "," U ","2L'"," U'","2R'"," U ","2L "," U'")
+            self.myperms2['X-Center-InOut-Vertical(3)'] = ("2L'"," U ","2R "," U'","2L "," U ","2R'"," U'")
+            self.myperms2['X-Center-InOut-Diagonal(2)'] = (' U ', "2L'", " U'", '2R ', ' U ', '2L ', " U'", "2R'")
+            self.myperms2['X-Center-InOut-Diagonal(3)'] = (' U ', "2R ", " U'", "2L'", ' U ', "2R'", " U'", "2L ")
+
+
+            
+            self.myperms2['X-Center-InIn-Diagonal(0)'] = (' U2', '2R ', '2U2', "2R'", " U2", '2R ', '2U2', "2R'")
+            self.myperms2['X-Center-OutOut-Diagonal(0)'] = (" D2", '2R ', '2U2', "2R'", " D2", '2R ', '2U2', "2R'")
+            self.myperms2['X-Center-InIn-Vertical(0)'] = (" U2", "2F'", '2U ', '2F ', " U2", "2F'", "2U'", '2F ')
+            self.myperms2['X-Center-OutOut-Vertical(0)'] = (" D2", "2F'", '2U ', '2F ', " D2", "2F'", "2U'", '2F ')
+
+            self.myperms2['X-Center-InOut-Diagonal(4)'] = (' U2', "2B'", "2U'", '2B ', ' U2', "2B'", '2U ', '2B ')
+            self.myperms2['X-Center-InOut-Diagonal(5)'] = (' D2', "2B'", "2U'", '2B ', ' D2', "2B'", '2U ', '2B ')
+
+            self.myperms2['X-Center-Adjacent3Center-AAA(0)'] = (" F ","2D "," R2","2D'","2R'","2D "," R2","2D'","2R "," F'")
+            self.myperms2['X-Center-Adjacent3Center-CCC(0)'] = (" F ","2U'"," R2","2U ","2L ","2U'"," R2","2U ","2L'"," F'")
+            self.myperms2['X-Center-Adjacent3Center-BBB(0)'] = (" F'","2D'","2L'"," U2","2L ","2D ","2L'"," U2","2L "," F ")
+            self.myperms2['X-Center-Adjacent3Center-DDD(0)'] = (" F'","2U ","2R "," U2","2R'","2U'","2R "," U2","2R'"," F ")
+
+            self.myperms2['X-Center-Adjacent3Center-AAC(0)'] = (" F'","2D "," R2","2D'","2R'","2D "," R2","2D'","2R "," F ")
+            self.myperms2['X-Center-Adjacent3Center-CCA(0)'] = (" F'","2U'"," R2","2U ","2L ","2U'"," R2","2U ","2L'"," F ")
+            self.myperms2['X-Center-Adjacent3Center-BBD(0)'] = (" F ","2D'","2L'"," U2","2L ","2D ","2L'"," U2","2L "," F'")
+            self.myperms2['X-Center-Adjacent3Center-DDB(0)'] = (" F ","2U ","2R "," U2","2R'","2U'","2R "," U2","2R'"," F'")
+            
+            self.myperms2['X-Center-Adjacent3Center-AAD(0)'] = ("2D "," R2","2D'","2R'","2D "," R2","2D'","2R ")
+            self.myperms2['X-Center-Adjacent3Center-CCB(0)'] = ("2U'"," R2","2U ","2L ","2U'"," R2","2U ","2L'")
+            self.myperms2['X-Center-Adjacent3Center-BBC(0)'] = ("2D'","2L'"," U2","2L ","2D ","2L'"," U2","2L ")
+            self.myperms2['X-Center-Adjacent3Center-DDA(0)'] = ("2U ","2R "," U2","2R'","2U'","2R "," U2","2R'")
+
+            self.myperms2['X-Center-Adjacent3Center-AAB(0)'] = ('2U ', "2L'", ' U2', '2L ', "2U'", "2L'", ' U2', '2L ')
+            self.myperms2['X-Center-Adjacent3Center-CCD(0)'] = ("2D'", '2R ', ' U2', "2R'", '2D ', '2R ', ' U2', "2R'")
+            self.myperms2['X-Center-Adjacent3Center-DDC(0)'] = ('2D ', ' R2', "2D'", '2L ', '2D ', ' R2', "2D'", "2L'")
+            self.myperms2['X-Center-Adjacent3Center-BBA(0)'] = ("2U'", ' R2', '2U ', "2R'", "2U'", ' R2', '2U ', '2R ')
+
+            self.myperms2['X-Center-Adjacent3Center-ADC(0)'] = ("2L'"," D'","2F'",' D ','2L '," D'",'2F ',' D ')
+            self.myperms2['X-Center-Adjacent3Center-CBA(0)'] = ("2R "," D'","2B ",' D ',"2R'"," D'","2B'",' D ')
+            self.myperms2['X-Center-Adjacent3Center-BAD(0)'] = ("2R "," D ","2F'"," D'","2R'"," D ","2F "," D'")
+            self.myperms2['X-Center-Adjacent3Center-DCB(0)'] = ("2L'"," D ","2B "," D'","2L "," D ","2B'"," D'")
+
+            self.myperms2['X-Center-Adjacent3Center-ABC(0)'] = (" U2","2L'"," D'","2F'",' D ','2L '," D'",'2F ',' D '," U2")
+            self.myperms2['X-Center-Adjacent3Center-CDA(0)'] = (" U2","2R "," D'","2B ",' D ',"2R'"," D'","2B'",' D '," U2")
+            self.myperms2['X-Center-Adjacent3Center-BCD(0)'] = (" U2","2R "," D ","2F'"," D'","2R'"," D ","2F "," D'"," U2")
+            self.myperms2['X-Center-Adjacent3Center-DAB(0)'] = (" U2","2L'"," D ","2B "," D'","2L "," D ","2B'"," D'"," U2")
+
+            self.myperms2['X-Center-Line3Center-AAD(0)'] = ("2R "," U ","2L "," U'","2R'"," U ","2L'"," U'")
+            self.myperms2['X-Center-Line3Center-CCB(0)'] = ("2L'"," U ","2R'"," U'","2L "," U ","2R "," U'")
+            self.myperms2['X-Center-Line3Center-ADA(0)'] = ("2R ", ' F ', '2U2', " F'", "2R'", ' F ', '2U2', " F'")
+            self.myperms2['X-Center-Line3Center-CBC(0)'] = ("2L'", ' F ', '2D2', " F'", '2L ', ' F ', '2D2', " F'")
+
+            self.myperms2['X-Center-Line3Center-ADD(0)'] = ("2L2"," F'","2R'"," F ","2L2"," F'","2R "," F ")
+            self.myperms2['X-Center-Line3Center-CBB(0)'] = ("2R2"," F'","2L "," F ","2R2"," F'","2L'"," F ")
+            self.myperms2['X-Center-Line3Center-AAA(0)'] = ('2U2', '2L ', '2F2', "2L'", ' F2', '2L ', '2F2', "2L'", ' F2', '2U2')
+            self.myperms2['X-Center-Line3Center-CCC(0)'] = ('2D2', "2R'", '2B2', '2R ', ' F2', "2R'", '2B2', '2R ', ' F2', '2D2')
+            self.myperms2['X-Center-Line3Center-CAA(0)'] = ('2D2', '2R ', '2B2', "2R'", ' B2', '2R ', '2B2', "2R'", ' B2', '2D2')
+            self.myperms2['X-Center-Line3Center-ACC(0)'] = ('2U2', "2L'", '2F2', '2L ', ' B2', "2L'", '2F2', '2L ', ' B2', '2U2')
+
+            self.myperms2['X-Center-Line3Center-ADB(0)'] = ('2D2', "2L'", ' U ', '2L ', '2D2', "2L'", " U'", '2L ')
+            self.myperms2['X-Center-Line3Center-CBD(0)'] = ('2U2', '2R ', ' U ', "2R'", '2U2', '2R ', " U'", "2R'")
+            self.myperms2['X-Center-Line3Center-ABD(0)'] = ('2L ', ' U ', "2L'", '2U2', '2L ', " U'", "2L'", '2U2')
+            self.myperms2['X-Center-Line3Center-CDB(0)'] = ("2R'", ' U ', '2R ', '2D2', "2R'", " U'", '2R ', '2D2')
+            
+            self.myperms2['X-Center-Line3Center-AAC(0)'] = ('2L ', ' U2', "2L'", '2D2', '2L ', ' U2', "2L'", '2D2')
+            self.myperms2['X-Center-Line3Center-CCA(0)'] = ("2R'", ' U2', '2R ', '2U2', "2R'", ' U2', '2R ', '2U2')
+            self.myperms2['X-Center-Line3Center-ACA(0)'] = ('2U2', '2L ', ' U2', "2L'", '2U2', '2L ', ' U2', "2L'")
+            self.myperms2['X-Center-Line3Center-CAC(0)'] = ('2D2', "2R'", ' U2', '2R ', '2D2', "2R'", ' U2', '2R ')
+
+            self.myperms2['X-Center-Line3Center-ACB(0)'] = ('2F2', '2L ', ' D ', '2R ', " D'", "2L'", ' D ', "2R'", " D'", '2F2')
+            self.myperms2['X-Center-Line3Center-CAD(0)'] = ('2B2', "2R'", ' D ', "2L'", " D'", '2R ', ' D ', '2L ', " D'", '2B2')
+            self.myperms2['X-Center-Line3Center-ABC(0)'] = ('2F2', '2L ', ' F ', '2D2', " F'", "2L'", ' F ', '2D2', '2F2', " F'")
+            self.myperms2['X-Center-Line3Center-CDA(0)'] = ('2B2', "2R'", ' F ', '2U2', " F'", '2R ', ' F ', '2U2', '2B2', " F'")
+            self.myperms2['X-Center-Line3Center-ABB(0)'] = ('2F2', '2R2', " F'", "2L'", ' F ', '2R2', " F'", '2L ', '2F2', ' F ')
+            self.myperms2['X-Center-Line3Center-CDD(0)'] = ('2B2', '2L2', " F'", '2R ', ' F ', '2L2', " F'", "2R'", '2B2', ' F ')
+            self.myperms2['X-Center-Line3Center-AAB(0)'] = ('2F2', " F'", '2R2', " F'", "2L'", ' F ', '2R2', " F'", '2L ', '2F2', ' F2')
+            self.myperms2['X-Center-Line3Center-CCD(0)'] = ('2B2', " F'", '2L2', " F'", '2R ', ' F ', '2L2', " F'", "2R'", '2B2', ' F2') 
+            self.myperms2['X-Center-Line3Center-ABA(0)'] = (' B2', '2F2', '2L ', ' B ', '2R2', " B'", "2L'", ' B ', '2R2', ' B ', '2F2')
+            self.myperms2['X-Center-Line3Center-CDC(0)'] = (' B2', '2B2', "2R'", ' B ', '2L2', " B'", '2R ', ' B ', '2L2', ' B ', '2B2')
+
+
+
+            if self.size % 2 == 1:
+                self.myperms2['Plus-Center-XA-'] = (" S2","2R2"," S2","2R2")
+                self.myperms2['Plus-Center-XB-'] = (" U "," S2","2R2"," S2","2R2"," U'")
+                self.myperms2['Plus-Center-Y-'] = (" E ","2R2"," E'","2R2")
+                self.myperms2['Plus-Center-Z-'] = ('2B ', " E'", '2B2', ' E ', '2B ')
+                self.myperms2['Plus-Center-WA-'] = ("2L2"," E2","2L'"," U ","2R'"," E2","2R "," U'","2L'")
+                self.myperms2['Plus-Center-WB-'] = ("2R2"," E2","2R "," U ","2L "," E2","2L'"," U'","2R ")
+                self.myperms2['Plus-Center-U-'] = ('2R ', ' S2', '2R2', ' S2', '2R ')
+                self.myperms2['Plus-Center-V-'] = (" E'", "2B'", ' E ', '2B2', " E'", "2B'", ' E ')
+                self.myperms2['Plus-Center-TA-'] = (' M ', '2U2', " M'", '2U ', ' S ', '2U2', " S'", "2U'")
+                self.myperms2['Plus-Center-TB-'] = (" U ","2L'", " E'", '2B ', ' E ', "2B'", '2L ', '2B2', ' E2', '2B ', ' E2', '2B '," U'")
+                self.myperms2['Plus-Center-TC-'] = (' S2', ' M2', ' D ', '2F2', " D'", ' S2', ' M2', ' D ', '2F2', " D'")
+
+                
+                self.myperms2['Plus-Center-6A-'] = ("2R "," E ","2R'"," E'")
+                self.myperms2['Plus-Center-6B-'] = (" E ","2R "," E'","2R'")                
+                self.myperms2['Plus-Center-6C-'] = ("2R "," E2","2R'"," E2")
+                self.myperms2['Plus-Center-6D-'] = (" E2","2R'"," E2","2R ")
+                self.myperms2['Plus-Center-6E-'] = ('2U ', " M'", '2B ', ' M ', "2B'", "2U'", " E'", "2F'", " E'", '2F ', ' E2')
+                self.myperms2['Plus-Center-6F-'] = ('2U ', ' S ', '2R ', " S'", " E'", '2F ', ' E ', "2F'", "2R'", "2U'")
+                self.myperms2['Plus-Center-6G-'] = ("2R "," E ","2R "," E'","2R2")
+                self.myperms2['Plus-Center-6H-'] = ("2R2"," E'","2R'"," E ","2R'")
+                self.myperms2['Plus-Center-6I-'] = (" M ","2U "," M ","2U'"," M2")
+                self.myperms2['Plus-Center-6J-'] = (" M2","2U'"," M'","2U "," M'")                
+
+
+
+                self.myperms2['Plus-Center-4A-'] = ("2R2"," E2","2R "," E2","2R ")
+                self.myperms2['Plus-Center-4B-'] = ("2R "," E2","2R "," E2","2R2")
+                self.myperms2['Plus-Center-4C-'] = ("2U "," S ","2R "," S'","2R'","2U'")
+                self.myperms2['Plus-Center-4D-'] = (" M'", "2B'", ' M2', "2U'", " M'", '2U ', '2B ')
+                self.myperms2['Plus-Center-4E-'] = ('2U ', " M'", '2U ', " M'", "2U'", ' M2', "2U'")
+                self.myperms2['Plus-Center-4XA-'] = ("2L'"," U ","2R'"," E2","2R "," U'"," E2","2L ")
+                self.myperms2['Plus-Center-4XB-'] = ("2L'"," D'","2R'"," E2","2R "," D "," E2","2L ")
+                self.myperms2['Plus-Center-4YA-'] = ("2B "," U'","2R "," E'","2R'"," U "," E ","2B'")
+                self.myperms2['Plus-Center-4YB-'] = ("2B "," D ","2R "," E'","2R'"," D'"," E ","2B'")                
+                self.myperms2['Plus-Center-4YC-'] = ('2L ', " U'", '2R ', ' E2', "2R'", " U ", ' E2', "2L'")
+                self.myperms2['Plus-Center-4YD-'] = ('2L ', ' D ', '2R ', ' E2', "2R'", " D'", ' E2', "2L'")
+                self.myperms2['Plus-Center-4ZA-'] = (' U2', '2R ', ' E2', '2R ', ' E2', '2R2', ' U2')
+                self.myperms2['Plus-Center-4ZB-'] = (' D2', '2R ', ' E2', '2R ', ' E2', '2R2', ' D2')
+                self.myperms2['Plus-Center-4ZC-'] = (' U2', '2R ', ' E2', "2R'", ' U2', '2L2', ' E2', '2L2')
+                self.myperms2['Plus-Center-4ZD-'] = (' D2', '2R ', ' E2', "2R'", ' D2', '2L2', ' E2', '2L2')
+                self.myperms2['Plus-Center-4WA-'] = ('2L ', ' E2', ' D ', '2R ', ' E2', "2R'", " D'", "2L'")
+                self.myperms2['Plus-Center-4WB-'] = ('2L ', ' E2', " U'", '2R ', ' E2', "2R'", " U ", "2L'")
+
+
+                self.myperms2['MidCenterBar(VV)'] = (" M'"," U "," L "," R'"," M "," F'"," M "," F "," L'"," R "," M'"," U'")
+                self.myperms2['MidCenterBar(HV)'] = (' U ', ' M ', " R'", ' L ', " F'", " M'", ' F ', " M'", ' R ', " L'", " U'", ' M ')
+                self.myperms2['MidCenterBar(HH)'] = (' M ', " R'", ' L ', " F'", " M'", ' F ', " M'", ' R ', " L'", " U'", ' M ',' U ')
+
+                self.myperms2['MidCenterBar-Opp(VV)'] = (" M2"," U "," L2"," R2"," M2"," D'"," M2"," D "," L2"," R2"," M2"," U'")
+                self.myperms2['MidCenterBar-Opp(HV)'] = (' U ', ' M2', " R2", ' L2', " D'", " M2", ' D ', " M2", ' R2', " L2", " U'", ' M2')
+
+                self.myperms2['MidCenterBar-Adjacent3Center-A'] = (" F "," U "," L "," R'"," M "," F'"," M "," F "," L'"," R "," M'"," U'"," M'"," F'")
+                self.myperms2['MidCenterBar-Adjacent3Center-B'] = (" U "," L "," R'"," M "," F'"," M "," F "," L'"," R "," M'"," U'"," M'")
+                self.myperms2['MidCenterBar-Adjacent3Center-C'] = (' F ',' L '," R'",' M '," F'",' M ',' F '," L'",' R '," M'"," U'"," M'",' U '," F'")
+                self.myperms2['MidCenterBar-Adjacent3Center-D'] = (" L "," R'"," M "," F'"," M "," F "," L'"," R "," M'"," U'"," M'"," U ")                
+                self.myperms2['MidCenterBar-Adjacent3Center-E'] = (" B'"," F "," U "," L "," R'"," M "," F'"," M "," F "," L'"," R "," M'"," U'"," M'"," F'"," B ")
+                self.myperms2['MidCenterBar-Adjacent3Center-F'] = (" B'"," U "," L "," R'"," M "," F'"," M "," F "," L'"," R "," M'"," U'"," M'"," B ")
+                self.myperms2['MidCenterBar-Adjacent3Center-G'] = (' B '," F'"," R'",' L ',' M ',' F ',' M '," F'",' R '," L'"," M'",' U '," M'"," U'",' F '," B'")
+                self.myperms2['MidCenterBar-Adjacent3Center-H'] = (" B'"," L "," R'"," M "," F'"," M "," F "," L'"," R "," M'"," U'"," M'"," U "," B ")
+
+                self.myperms2['MidCenterBar-Adjacent3Center-OA'] = (" E'"," U'"," M'"," U "," L "," R'"," M "," F'"," M "," F "," L'"," R "," M'"," E ")
+                self.myperms2['MidCenterBar-Adjacent3Center-OB'] = self.invert_moves(self.myperms2['MidCenterBar-Adjacent3Center-OA'])
+                self.myperms2['MidCenterBar-Adjacent3Center-OC'] = (" E'"," M'"," U "," L "," R'"," M "," F'"," M "," F "," L'"," R "," M'"," U'"," E ")
+                self.myperms2['MidCenterBar-Adjacent3Center-OD'] = self.invert_moves(self.myperms2['MidCenterBar-Adjacent3Center-OC'])
+
+
+
+                self.myperms2['Plus-Center-OppX'] = (" U ", '2R2', " U'", ' S2', ' U ', '2R2', " U'", ' S2')
+                self.myperms2['Plus-Center-OppX(1)'] = (' U ', '2R2', " U'", ' M2', ' U ', '2R2', " U'", ' M2')
+                self.myperms2['Plus-Center-OppX(2)'] = ('2F2', ' D ', ' M2', '2F2', ' M2', '2F2', " D'", '2F2')
+                self.myperms2['Plus-Center-OppY'] = ('2R2', " U'", ' S2', ' U ', '2R2', " U'", ' S2', ' U ')
+                self.myperms2['Plus-Center-OppY(1)'] = ('2R2', " U'", ' M2', ' U ', '2R2', " U'", ' M2', ' U ')
+                self.myperms2['Plus-Center-OppZ'] = (" M2"," U ","2F2"," U'"," M2"," U ","2F2"," U'")
+                self.myperms2['Plus-Center-OppZ(1)'] = (' M2', ' U ', '2R2', " U'", ' M2', ' U ', '2R2', " U'")
+                
+
+                self.myperms2['Plus-Center-Middle-Inside(0)'] = (" S'", '2U ', ' S ', " U2", " S'", "2U'", ' S ', " U2")
+                self.myperms2['Plus-Center-Middle-Outside(0)'] = (" S'", '2U ', ' S ', " D2", " S'", "2U'", ' S ', " D2")
+                self.myperms2['Plus-Center-Middle-Vertical(0)'] = ('2R ', ' E2', "2R'", " U2", '2R ', ' E2', "2R'", " U2")
+                self.myperms2['Plus-Center-Middle-Vertical(1)'] = ('2R ', ' E2', "2R'", " D2", '2R ', ' E2', "2R'", " D2")
+                self.myperms2['Plus-Center-Middle-Vertical(2)'] = ("2R "," U "," M'"," U'","2R'"," U "," M "," U'")
+                self.myperms2['Plus-Center-Middle-Vertical(3)'] = ("2L'"," U "," M'"," U'","2L "," U "," M "," U'")
+                self.myperms2['Plus-Center-Middle-Vertical(4)'] = (" E'"," L2"," E ","2R'"," E'"," L2"," E ","2R ")
+                self.myperms2['Plus-Center-Middle-Vertical(5)'] = (" S'", ' L2', ' S ', "2L'", " S'", ' L2', ' S ', '2L ')
+
+                
+                self.myperms2['Plus-Center-Middle-Diagonal(0)'] = (' U2', '2R ', ' E2', "2R'", " U2", '2R ', ' E2', "2R'")
+                self.myperms2['Plus-Center-Middle-Diagonal(1)'] = (" D2", '2R ', ' E2', "2R'", " D2", '2R ', ' E2', "2R'")
+                self.myperms2['Plus-Center-Middle-Diagonal(2)'] = ("2R'"," E'"," L2"," E ","2R "," E'"," L2"," E ")
+                self.myperms2['Plus-Center-Middle-Diagonal(3)'] = ("2L'", " S'", ' L2', ' S ', '2L ', " S'", ' L2', ' S ')
+
+                self.myperms2['Plus-Center-Middle-Inside(1)'] = (" U2", " S'", '2U ', ' S ', " U2", " S'", "2U'", ' S ')
+                self.myperms2['Plus-Center-Middle-Outside(1)'] = (" D2", " S'", '2U ', ' S ', " D2", " S'", "2U'", ' S ')
+
+                self.myperms2['Plus-Center-Middle-Inside(2)'] = (' U2', '2F ', ' E ', "2F'", ' U2', '2F ', " E'", "2F'")
+                self.myperms2['Plus-Center-Middle-Outside(2)'] = (' D2', '2F ', ' E ', "2F'", ' D2', '2F ', " E'", "2F'")
+
+                self.myperms2['Plus-Center-Middle-Inside(3)'] = (" U ", " M'", " U'", "2L'", " U ", ' M ', " U'", '2L ')
+                self.myperms2['Plus-Center-Middle-Outside(3)'] = (" U ", " M'", " U'", "2R ", " U ", ' M ', " U'", "2R'")
+
+                self.myperms2['Plus-Center-Middle-Inside(4)'] = (" F'", '2L ', ' F ', ' M ', " F'", "2L'", ' F ', " M'")
+                self.myperms2['Plus-Center-Middle-Outside(4)'] = (" F'", "2R'", ' F ', ' M ', " F'", "2R ", ' F ', " M'")
+
+
+
+
+                self.myperms2['Plus-Center-InOut(0)'] = (" U2","2D'"," M'","2D "," M "," U2"," M'","2D'"," M ","2D ")
+                self.myperms2['Plus-Center-InOut(1)'] = (" U2","2U "," M'","2U'"," M "," U2"," M'","2U "," M ","2U'")
+                self.myperms2['Plus-Center-InOut(2)'] = (" M'"," U ","2R "," U'"," M "," U ","2R'"," U'")
+                self.myperms2['Plus-Center-InOut(3)'] = (" M'"," U ","2L'"," U'"," M "," U ","2L "," U'")                
+                self.myperms2['Plus-Center-OutOut(0)'] = ("2D'"," M'","2D "," M "," U2"," M'","2D'"," M ","2D "," U2")
+                self.myperms2['Plus-Center-InIn(0)'] = ("2U "," M'","2U'"," M "," U2"," M'","2U "," M ","2U'"," U2")
+
+                self.myperms2['Plus-Center-Adjacent3Center-AAA(0)'] = (" F ","2D "," R2","2D'"," M ","2D "," R2","2D'"," M'"," F'")
+                self.myperms2['Plus-Center-Adjacent3Center-CCC(0)'] = (" F ","2U'"," R2","2U "," M ","2U'"," R2","2U "," M'"," F'")
+                self.myperms2['Plus-Center-Adjacent3Center-BBB(0)'] = (" F'"," E'","2L'"," U2","2L "," E ","2L'"," U2","2L "," F ")
+                self.myperms2['Plus-Center-Adjacent3Center-DDD(0)'] = (" F'"," E'","2R "," U2","2R'"," E ","2R "," U2","2R'"," F ")
+
+                self.myperms2['Plus-Center-Adjacent3Center-AAC(0)'] = (" F'","2D "," R2","2D'"," M ","2D "," R2","2D'"," M'"," F ")
+                self.myperms2['Plus-Center-Adjacent3Center-CCA(0)'] = (" F'","2U'"," R2","2U "," M ","2U'"," R2","2U "," M'"," F ")
+                self.myperms2['Plus-Center-Adjacent3Center-BBD(0)'] = (" F "," E'","2L'"," U2","2L "," E ","2L'"," U2","2L "," F'")
+                self.myperms2['Plus-Center-Adjacent3Center-DDB(0)'] = (" F "," E'","2R "," U2","2R'"," E ","2R "," U2","2R'"," F'")
+            
+                self.myperms2['Plus-Center-Adjacent3Center-AAD(0)'] = ("2D "," R2","2D'"," M ","2D "," R2","2D'"," M'")
+                self.myperms2['Plus-Center-Adjacent3Center-CCB(0)'] = ("2U'"," R2","2U "," M ","2U'"," R2","2U "," M'")
+                self.myperms2['Plus-Center-Adjacent3Center-BBC(0)'] = (" E'","2L'"," U2","2L "," E ","2L'"," U2","2L ")
+                self.myperms2['Plus-Center-Adjacent3Center-DDA(0)'] = (" E'","2R "," U2","2R'"," E ","2R "," U2","2R'")
+
+                self.myperms2['Plus-Center-Adjacent3Center-DDC(0)'] = ('2L2', " F'", ' E ', ' F ', '2L ', " F'", " E'", ' F ', '2L ')
+                self.myperms2['Plus-Center-Adjacent3Center-BBA(0)'] = ('2R2', " F'", ' E ', ' F ', "2R'", " F'", " E'", ' F ', "2R'")
+                self.myperms2['Plus-Center-Adjacent3Center-CCD(0)'] = ('2D ', ' F ', " M'", " F'", '2D ', ' F ', ' M ', " F'", '2D2')
+                self.myperms2['Plus-Center-Adjacent3Center-AAB(0)'] = ("2U'", ' F ', " M'", " F'", "2U'", ' F ', ' M ', " F'", '2U2')
+                
+
+                self.myperms2['Plus-Center-Adjacent3Center-ADC(0)'] = ("2L'"," D'"," S'",' D ','2L '," D'",' S ',' D ')
+                self.myperms2['Plus-Center-Adjacent3Center-CBA(0)'] = ("2R "," D'"," S'",' D ',"2R'"," D'"," S ",' D ')
+                self.myperms2['Plus-Center-Adjacent3Center-BAD(0)'] = (" M'", ' D ', "2F'", " D'", ' M ', ' D ', "2F ", " D'")
+                self.myperms2['Plus-Center-Adjacent3Center-DCB(0)'] = (" M'", ' D ', '2B ', " D'", ' M ', ' D ', "2B'", " D'")
+
+                self.myperms2['Plus-Center-Adjacent3Center-ABC(0)'] = (" U2","2L'"," D'"," S'",' D ','2L '," D'",' S ',' D '," U2")
+                self.myperms2['Plus-Center-Adjacent3Center-CDA(0)'] = (" U2","2R "," D'"," S'",' D ',"2R'"," D'"," S ",' D '," U2")
+                self.myperms2['Plus-Center-Adjacent3Center-BCD(0)'] = (" U2"," M'", "2F'", ' M ', ' U ', " M'", " U'", '2F ', ' U ', ' M ', " U ")
+                self.myperms2['Plus-Center-Adjacent3Center-DAB(0)'] = (" U2"," M'", "2B ", ' M ', ' U ', " M'", " U'", "2B'", ' U ', ' M ', " U ")
+
+                self.myperms2['Plus-Center-Line3Center-BBA(0)'] = ("2R "," U "," M "," U'","2R'"," U "," M'"," U'")
+                self.myperms2['Plus-Center-Line3Center-BBC(0)'] = ('2R '," U'",' M ',' U ',"2R'"," U'"," M'",' U ')
+                self.myperms2['Plus-Center-Line3Center-BDC(0)'] = (" U2","2L'"," U "," M "," U'","2L "," U "," M'"," U ")
+                self.myperms2['Plus-Center-Line3Center-BDA(0)'] = (" U2","2L'"," U'",' M ',' U ',"2L "," U'"," M'"," U'")
+                self.myperms2['Plus-Center-Line3Center-BAB(0)'] = ("2R ", ' F ', ' E2', " F'", "2R'", ' F ', ' E2', " F'")
+                self.myperms2['Plus-Center-Line3Center-BCB(0)'] = ("2R ", " F'", ' E2', " F ", "2R'", " F'", ' E2', " F ")
+
+                self.myperms2['Plus-Center-Line3Center-ABB(0)'] = ("2R2"," F "," M "," F'","2R2"," F "," M'"," F'")
+                self.myperms2['Plus-Center-Line3Center-CBB(0)'] = ("2R2"," F'"," M "," F ","2R2"," F'"," M'"," F ")
+                self.myperms2['Plus-Center-Line3Center-CAB(0)'] = (" F'","2R2"," F'"," M "," F ","2R2"," F'"," M'"," F2")
+                self.myperms2['Plus-Center-Line3Center-ACB(0)'] = (" F ","2R2"," F "," M "," F'","2R2"," F "," M'"," F2")
+
+                self.myperms2['Plus-Center-Line3Center-AAB(0)'] = (" M'"," U'","2R'"," U "," M "," U'","2R "," U ")
+                self.myperms2['Plus-Center-Line3Center-CCB(0)'] = (" M'"," U ","2R'"," U'"," M "," U ","2R "," U'")
+                self.myperms2['Plus-Center-Line3Center-ABA(0)'] = (" M'", " F'", '2U2', ' F ', ' M ', " F'", '2U2', ' F ')
+                self.myperms2['Plus-Center-Line3Center-CBC(0)'] = (" M'", ' F ', '2D2', " F'", ' M ', ' F ', '2D2', " F'")
+
+                self.myperms2['Plus-Center-Line3Center-BAA(0)'] = (" M2"," F'","2R'"," F "," M2"," F'","2R "," F ")
+                self.myperms2['Plus-Center-Line3Center-BCC(0)'] = (" M2"," F ","2R'"," F'"," M2"," F ","2R "," F'")
+
+                self.myperms2['Plus-Center-Line3Center-BDD(0)'] = ("2L ", " S ", ' R2', " S'", '2L2', " S ", ' R2', " S'", "2L ")
+                self.myperms2['Plus-Center-Line3Center-BBB(0)'] = ('2L ', ' E2', "2L'", ' U2', '2L ', ' E2', '2L2', ' E2', '2L ', ' U2', "2L'", ' E2', '2L ')
+                self.myperms2['Plus-Center-Line3Center-BDB(0)'] = (' E2', "2L'", ' U2', '2L ', ' E2', "2L'", ' U2', '2L ')
+                self.myperms2['Plus-Center-Line3Center-BBD(0)'] = ('2L ', ' U2', "2L'", ' E2', '2L ', ' U2', "2L'", ' E2')
+                self.myperms2['Plus-Center-Line3Center-BCA(0)'] = (" S ", "2U ", " S'", ' U2', " S ", '2U2', " S'", ' U2', " S ", "2U ", " S'")
+                self.myperms2['Plus-Center-Line3Center-BAC(0)'] = (" S'", '2D ', ' S ', ' U2', " S'", '2D2', ' S ', ' U2', " S'", '2D ', ' S ')
+
+                self.myperms2['Plus-Center-Line3Center-CCA(0)'] = ("2U2"," B "," M "," B'","2U2"," B "," M'"," B'")
+                self.myperms2['Plus-Center-Line3Center-AAC(0)'] = ("2D2"," B "," M "," B'","2D2"," B "," M'"," B'")
+                self.myperms2['Plus-Center-Line3Center-ACA(0)'] = (' F ', " M'", " F'", '2U2', ' F ', ' M ', " F'", '2U2')
+                self.myperms2['Plus-Center-Line3Center-CAC(0)'] = (' F ', " M'", " F'", '2D2', ' F ', ' M ', " F'", '2D2')
+                self.myperms2['Plus-Center-Line3Center-CCC(0)'] = (" B2","2U2"," B "," M "," B'","2U2"," B "," M'"," B ")
+                self.myperms2['Plus-Center-Line3Center-AAA(0)'] = (" B2","2D2"," B "," M "," B'","2D2"," B "," M'"," B ")
+
+                self.myperms2['Plus-Center-Line3Center-ABD(0)'] = (' E2', '2R ', " U'", "2R'", ' E2', '2R ', ' U ', "2R'")
+                self.myperms2['Plus-Center-Line3Center-CBD(0)'] = (' E2', '2R ', ' U ', "2R'", ' E2', '2R ', " U'", "2R'")
+                
+            if self.size >= 6:
+                self.myperms2['Oblique-Center-XA-'] = ("2R2","3F2","2R2","3F2")
+                self.myperms2['Oblique-Center-XB-'] = (" U ","2R2","3F2","2R2","3F2"," U'")
+                self.myperms2['Oblique-Center-XC-'] = (" U2","2R2","3F2","2R2","3F2"," U2")
+                self.myperms2['Oblique-Center-WA-'] = ("2L2","3D2","2L'"," U ","2R'","3D2","2R "," U'","2L'")
+                self.myperms2['Oblique-Center-WB-'] = ("2R2","3U2","2R "," U ","2L ","3U2","2L'"," U'","2R ")
+                self.myperms2['Oblique-Center-WC-'] = ("2L2","3U2","2L'"," U ","2R'","3U2","2R "," U'","2L'")
+                self.myperms2['Oblique-Center-WD-'] = ("2R2","3D2","2R "," U ","2L ","3D2","2L'"," U'","2R ")
+                self.myperms2['Oblique-Center-VA-'] = ('2L2', ' U ', '2L2', '3B2', '2L2', " U'", '2L2', ' U ', '3B2', " U'")
+                self.myperms2['Oblique-Center-VB-'] = (" U'", '2L2', ' U ', '2L2', '3B2', '2L2', " U'", '2L2', ' U ', '3B2')
+                self.myperms2['Oblique-Center-VC-'] = ('2B2', '3L2', '2B2', '3L2', ' U ', '3B2', '2R2', '3B2', '2R2', " U'")
+                self.myperms2['Oblique-Center-UA-'] = ("3L'", "2D'", '3B ', '2D ', "3B'", '3L ', '3B2', '2U2', '3B ', '2U2', '3B ')
+                self.myperms2['Oblique-Center-UB-'] = ("3L'", "2U ", '3B ', "2U'", "3B'", '3L ', '3B2', '2D2', '3B ', '2D2', '3B ')
+                self.myperms2['Oblique-Center-UC-'] = (" U ","3L'", "2D'", '3B ', '2D ', "3B'", '3L ', '3B2', '2U2', '3B ', '2U2', '3B '," U'")
+                self.myperms2['Oblique-Center-UD-'] = (" U ","3L'", "2U ", '3B ', "2U'", "3B'", '3L ', '3B2', '2D2', '3B ', '2D2', '3B '," U'")
+                self.myperms2['Oblique-Center-UE-'] = (" U2","3L'", "2D'", '3B ', '2D ', "3B'", '3L ', '3B2', '2U2', '3B ', '2U2', '3B '," U2")
+                self.myperms2['Oblique-Center-UF-'] = (" U2","3L'", "2U ", '3B ', "2U'", "3B'", '3L ', '3B2', '2D2', '3B ', '2D2', '3B '," U2")
+                self.myperms2['Oblique-Center-ZA-'] = ('3L2', '2B2', '3L2', '2B2', ' U2', '3R2', '2B2', '3R2', '2B2', ' U2')
+                self.myperms2['Oblique-Center-ZB-'] = (" U ", '3L2', '2B2', '3L2', '2B2', ' U2', '3R2', '2B2', '3R2', '2B2', ' U ')
+
+                self.myperms2['Oblique-Center-8-'] = ("3U2","2R2","3U'","2R2","3U'","2R2","3U'","2R2","3U ")      
+                
+                self.myperms2['Oblique-Center-6A-'] = ("2R ","3U ","2R'","3U'")
+                self.myperms2['Oblique-Center-6B-'] = ("2R ","3U'","2R'","3U ")
+                self.myperms2['Oblique-Center-6C-'] = ("2R ","3U2","2R'","3U2")
+                self.myperms2['Oblique-Center-6D-'] = ("2R2","3U ","2R2","3U'")
+                self.myperms2['Oblique-Center-6E-'] = ("2R'", "3F'", "2U'", '3F ', '2U ', '2R ', '3L ', '2F2', '3L ', '2F2', '3L2')
+                self.myperms2['Oblique-Center-6F-'] = ('3L ', "2F'", '3D ', '2F ', "3D'", '2L ', "3L'", '3B2', '2L ', '3B2', '2L2')
+                self.myperms2['Oblique-Center-6G-'] = ("2R ","3U ","2R ","3U'","2R2")
+                self.myperms2['Oblique-Center-6H-'] = ("2R ","3U'","2R ","3U ","2R2")
+                self.myperms2['Oblique-Center-6I-'] = ("2R2","3U ","2R'","3U'","2R'")
+                self.myperms2['Oblique-Center-6J-'] = ("2R2","3U'","2R'","3U ","2R'")
+                self.myperms2['Oblique-Center-6K-'] = ("2R2","3U ","2R2","3U ","2R2","3U2","2R2")
+                self.myperms2['Oblique-Center-6L-'] = ("2R2","3U2","2R2","3U ","2R2","3U ","2R2")
+                self.myperms2['Oblique-Center-6M-'] = ("2U ","3R2","2U2","3R2","2U ")
+                self.myperms2['Oblique-Center-6N-'] = ("2F ","3R ","2F2","3R'","2F ")
+                self.myperms2['Oblique-Center-6O-'] = ("2F'","3R ","2F2","3R'","2F'")                
+
+                self.myperms2['Oblique-Center-4A-'] = ("2R2","3U2","2R ","3U2","2R ")
+                self.myperms2['Oblique-Center-4B-'] = ("2R ","3U2","2R ","3U2","2R2")
+                self.myperms2['Oblique-Center-4C-'] = ("2U ","3F ","2R ","3F'","2R'","2U'")
+                self.myperms2['Oblique-Center-4D-'] = ("2F'", '3D ', "2R'", "3D'", '2R ', '2F ')
+                self.myperms2['Oblique-Center-4XA-'] = ("2L'"," U ","2R'","3D2","2R "," U'","3D2","2L ")
+                self.myperms2['Oblique-Center-4XB-'] = ("2L'"," D'","2R'","3D2","2R "," D ","3D2","2L ")
+                self.myperms2['Oblique-Center-4YA-'] = ("2B "," U'","2R ","3U ","2R'"," U ","3U'","2B'")
+                self.myperms2['Oblique-Center-4YB-'] = ("2B "," D ","2R ","3U ","2R'"," D'","3U'","2B'")
+                self.myperms2['Oblique-Center-4YC-'] = ('2L ', " U'", '2R ', '3U2', "2R'", " U ", '3U2', "2L'")
+                self.myperms2['Oblique-Center-4YD-'] = ('2L ', ' D ', '2R ', '3U2', "2R'", " D'", '3U2', "2L'")
+                self.myperms2['Oblique-Center-4ZA-'] = (' U2', '2R ', '3U2', '2R ', '3U2', '2R2', ' U2')
+                self.myperms2['Oblique-Center-4ZB-'] = (' D2', '2R ', '3U2', '2R ', '3U2', '2R2', ' D2')
+                self.myperms2['Oblique-Center-4ZC-'] = (' U2', '2R ', '3U2', "2R'", ' U2', '2L2', '3U2', '2L2')
+                self.myperms2['Oblique-Center-4ZD-'] = (' D2', '2R ', '3U2', "2R'", ' D2', '2L2', '3U2', '2L2')
+                self.myperms2['Oblique-Center-4WA-'] = ('2L ', '3U2', ' D ', '2R ', '3U2', "2R'", " D'", "2L'")
+                self.myperms2['Oblique-Center-4WB-'] = ('2L ', '3U2', " U'", '2R ', '3U2', "2R'", " U ", "2L'")
+                
+
+                self.myperms2['Oblique-Center-OppX'] = (" U ", '2R2', " U'", '3F2', ' U ', '2R2', " U'", '3F2')
+                self.myperms2['Oblique-Center-OppX(1)'] = ('3B2', ' U ', '3B2', '2R2', '3B2', '2R2', " U'", '3B2')
+                self.myperms2['Oblique-Center-OppX(2)'] = (" D'", '3L2', ' D ', '2R2', " D'", '3L2', ' D ', '2R2')
+                self.myperms2['Oblique-Center-OppY'] = ('2R2', " U'", '3F2', ' U ', '2R2', " U'", '3F2', ' U ')
+                self.myperms2['Oblique-Center-OppY(1)'] = ('2R2', ' U ', '3F2', " U'", '2R2', ' U ', '3F2', " U'")
+                self.myperms2['Oblique-Center-OppY(2)'] = ('3F2', ' D ', '2R2', '3F2', '2R2', '3F2', " D'", '3F2')
+                self.myperms2['Oblique-Center-OppY(3)'] = ('3B2', " U'", '2R2', '3B2', '2R2', '3B2', ' U ', '3B2')
+                self.myperms2['Oblique-Center-OppY(4)'] = ('2R2', " U'", '3L2', ' U ', '2R2', " U'", '3L2', ' U ')
+                self.myperms2['Oblique-Center-OppY(5)'] = ('2R2', ' U ', '3R2', " U'", '2R2', ' U ', '3R2', " U'")
+                self.myperms2['Oblique-Center-OppZ'] = (' U ', '3F2', " U'", '2R2', ' U ', '3F2', " U'", '2R2')
+                self.myperms2['Oblique-Center-OppZ(1)'] = ('3B2', " U'", '3B2', '2R2', '3B2', '2R2', ' U ', '3B2')
+                self.myperms2['Oblique-Center-OppZ(2)'] = (' U ', '3F2', " U'", '2F2', ' U ', '3F2', " U'", '2F2')
+
+
+                self.myperms2['Oblique-Center-InOut-Diagonal(0)'] = ("3F'", '2U ', '3F ', " U2", "3F'", "2U'", '3F ', " U2")
+                self.myperms2['Oblique-Center-InOut-Diagonal(1)'] = ("3F'", '2U ', '3F ', " D2", "3F'", "2U'", '3F ', " D2")
+                self.myperms2['Oblique-Center-InOut-Vertical(0)'] = ('2R ', '3U2', "2R'", " U2", '2R ', '3U2', "2R'", " U2")
+                self.myperms2['Oblique-Center-InOut-Vertical(1)'] = ('2R ', '3U2', "2R'", " D2", '2R ', '3U2', "2R'", " D2")
+                self.myperms2['Oblique-Center-InOut-Vertical(2)'] = ("2R "," U ","3L'"," U'","2R'"," U ","3L "," U'")
+                self.myperms2['Oblique-Center-InOut-Vertical(3)'] = ("2L'"," U ","3R "," U'","2L "," U ","3R'"," U'")
+                self.myperms2['Oblique-Center-InOut-Vertical(4)'] = ("2R "," U ","3R "," U'","2R'"," U ","3R'"," U'")
+                self.myperms2['Oblique-Center-InOut-Vertical(5)'] = ("2L'"," U ","3L'"," U'","2L "," U ","3L "," U'")                
+                self.myperms2['Oblique-Center-InOut-Diagonal(2)'] = (' U ', "3L'", " U'", '2R ', ' U ', '3L ', " U'", "2R'")
+                self.myperms2['Oblique-Center-InOut-Diagonal(3)'] = (' U ', "3R ", " U'", "2L'", ' U ', "3R'", " U'", "2L ")
+                
+                self.myperms2['Oblique-Center-InIn-Diagonal(0)'] = (' U2', '2R ', '3U2', "2R'", " U2", '2R ', '3U2', "2R'")
+                self.myperms2['Oblique-Center-OutOut-Diagonal(0)'] = (" D2", '2R ', '3U2', "2R'", " D2", '2R ', '3U2', "2R'")
+                self.myperms2['Oblique-Center-InIn-Vertical(0)'] = (" U2", "3F'", '2U ', '3F ', " U2", "3F'", "2U'", '3F ')
+                self.myperms2['Oblique-Center-OutOut-Vertical(0)'] = (" D2", "3F'", '2U ', '3F ', " D2", "3F'", "2U'", '3F ')
+
+                self.myperms2['Oblique-Center-InOut-Diagonal(4)'] = (' U2', "3B'", "2U'", '3B ', ' U2', "3B'", '2U ', '3B ')
+                self.myperms2['Oblique-Center-InOut-Diagonal(5)'] = (' D2', "3B'", "2U'", '3B ', ' D2', "3B'", '2U ', '3B ')
+
+                
+
+                self.myperms2['Oblique-Center-Adjacent3Center-AAA(0)'] = (" F ","2D "," R2","2D'","3R'","2D "," R2","2D'","3R "," F'")
+                self.myperms2['Oblique-Center-Adjacent3Center-CCC(0)'] = (" F ","2U'"," R2","2U ","3L ","2U'"," R2","2U ","3L'"," F'")
+                self.myperms2['Oblique-Center-Adjacent3Center-BBB(0)'] = (" F'","3D'","2L'"," U2","2L ","3D ","2L'"," U2","2L "," F ")
+                self.myperms2['Oblique-Center-Adjacent3Center-DDD(0)'] = (" F'","3U ","2R "," U2","2R'","3U'","2R "," U2","2R'"," F ")
+
+                self.myperms2['Oblique-Center-Adjacent3Center-AAC(0)'] = (" F'","2D "," R2","2D'","3R'","2D "," R2","2D'","3R "," F ")
+                self.myperms2['Oblique-Center-Adjacent3Center-CCA(0)'] = (" F'","2U'"," R2","2U ","3L ","2U'"," R2","2U ","3L'"," F ")
+                self.myperms2['Oblique-Center-Adjacent3Center-BBD(0)'] = (" F ","3D'","2L'"," U2","2L ","3D ","2L'"," U2","2L "," F'")
+                self.myperms2['Oblique-Center-Adjacent3Center-DDB(0)'] = (" F ","3U ","2R "," U2","2R'","3U'","2R "," U2","2R'"," F'")
+                
+                self.myperms2['Oblique-Center-Adjacent3Center-AAD(0)'] = ("2D "," R2","2D'","3R'","2D "," R2","2D'","3R ")
+                self.myperms2['Oblique-Center-Adjacent3Center-CCB(0)'] = ("2U'"," R2","2U ","3L ","2U'"," R2","2U ","3L'")
+                self.myperms2['Oblique-Center-Adjacent3Center-BBC(0)'] = ("3D'","2L'"," U2","2L ","3D ","2L'"," U2","2L ")
+                self.myperms2['Oblique-Center-Adjacent3Center-DDA(0)'] = ("3U ","2R "," U2","2R'","3U'","2R "," U2","2R'")
+
+                self.myperms2['Oblique-Center-Adjacent3Center-AAB(0)'] = ('3U ', "2L'", ' U2', '2L ', "3U'", "2L'", ' U2', '2L ')
+                self.myperms2['Oblique-Center-Adjacent3Center-CCD(0)'] = ("3D'", '2R ', ' U2', "2R'", '3D ', '2R ', ' U2', "2R'")
+                self.myperms2['Oblique-Center-Adjacent3Center-DDC(0)'] = ('2D ', ' R2', "2D'", '3L ', '2D ', ' R2', "2D'", "3L'")
+                self.myperms2['Oblique-Center-Adjacent3Center-BBA(0)'] = ("2U'", ' R2', '2U ', "3R'", "2U'", ' R2', '2U ', '3R ')
+
+                self.myperms2['Oblique-Center-Adjacent3Center-ADC(0)'] = ("2L'"," D'","3F'",' D ','2L '," D'",'3F ',' D ')
+                self.myperms2['Oblique-Center-Adjacent3Center-CBA(0)'] = ("2R "," D'","3B ",' D ',"2R'"," D'","3B'",' D ')
+                self.myperms2['Oblique-Center-Adjacent3Center-BAD(0)'] = ("2R "," D ","3F'"," D'","2R'"," D ","3F "," D'")
+                self.myperms2['Oblique-Center-Adjacent3Center-DCB(0)'] = ("2L'"," D ","3B "," D'","2L "," D ","3B'"," D'")
+
+                self.myperms2['Oblique-Center-Adjacent3Center-ABC(0)'] = (" U2","2L'"," D'","3F'",' D ','2L '," D'",'3F ',' D '," U2")
+                self.myperms2['Oblique-Center-Adjacent3Center-CDA(0)'] = (" U2","2R "," D'","3B ",' D ',"2R'"," D'","3B'",' D '," U2")
+                self.myperms2['Oblique-Center-Adjacent3Center-BCD(0)'] = (" U2","2R "," D ","3F'"," D'","2R'"," D ","3F "," D'"," U2")
+                self.myperms2['Oblique-Center-Adjacent3Center-DAB(0)'] = (" U2","2L'"," D ","3B "," D'","2L "," D ","3B'"," D'"," U2")
+
+                self.myperms2['Oblique-Center-Line3Center-AAD(0)'] = ("2R "," U ","3L "," U'","2R'"," U ","3L'"," U'")
+                self.myperms2['Oblique-Center-Line3Center-CCB(0)'] = ("2L'"," U ","3R'"," U'","2L "," U ","3R "," U'")
+                self.myperms2['Oblique-Center-Line3Center-ADA(0)'] = ("2R ", ' F ', '3U2', " F'", "2R'", ' F ', '3U2', " F'")
+                self.myperms2['Oblique-Center-Line3Center-CBC(0)'] = ("2L'", ' F ', '3D2', " F'", '2L ', ' F ', '3D2', " F'")
+
+                self.myperms2['Oblique-Center-Line3Center-ADD(0)'] = ("2L2"," F'","3R'"," F ","2L2"," F'","3R "," F ")
+                self.myperms2['Oblique-Center-Line3Center-CBB(0)'] = ("2R2"," F'","3L "," F ","2R2"," F'","3L'"," F ")
+                self.myperms2['Oblique-Center-Line3Center-AAA(0)'] = ('3U2', '2L ', '3F2', "2L'", ' F2', '2L ', '3F2', "2L'", ' F2', '3U2')
+                self.myperms2['Oblique-Center-Line3Center-CCC(0)'] = ('3D2', "2R'", '3B2', '2R ', ' F2', "2R'", '3B2', '2R ', ' F2', '3D2')
+                self.myperms2['Oblique-Center-Line3Center-CAA(0)'] = ('3D2', '2R ', '3B2', "2R'", ' B2', '2R ', '3B2', "2R'", ' B2', '3D2')
+                self.myperms2['Oblique-Center-Line3Center-ACC(0)'] = ('3U2', "2L'", '3F2', '2L ', ' B2', "2L'", '3F2', '2L ', ' B2', '3U2')
+
+                self.myperms2['Oblique-Center-Line3Center-ADB(0)'] = ('3D2', "2L'", ' U ', '2L ', '3D2', "2L'", " U'", '2L ')
+                self.myperms2['Oblique-Center-Line3Center-CBD(0)'] = ('3U2', '2R ', ' U ', "2R'", '3U2', '2R ', " U'", "2R'")
+                self.myperms2['Oblique-Center-Line3Center-ABD(0)'] = ('2L ', ' U ', "2L'", '3U2', '2L ', " U'", "2L'", '3U2')
+                self.myperms2['Oblique-Center-Line3Center-CDB(0)'] = ("2R'", ' U ', '2R ', '3D2', "2R'", " U'", '2R ', '3D2')
+
+                self.myperms2['Oblique-Center-Line3Center-AAC(0)'] = ('2L ', ' U2', "2L'", '3D2', '2L ', ' U2', "2L'", '3D2')
+                self.myperms2['Oblique-Center-Line3Center-CCA(0)'] = ("2R'", ' U2', '2R ', '3U2', "2R'", ' U2', '2R ', '3U2')
+                self.myperms2['Oblique-Center-Line3Center-ACA(0)'] = ('3U2', '2L ', ' U2', "2L'", '3U2', '2L ', ' U2', "2L'")
+                self.myperms2['Oblique-Center-Line3Center-CAC(0)'] = ('3D2', "2R'", ' U2', '2R ', '3D2', "2R'", ' U2', '2R ')
+
+                self.myperms2['Oblique-Center-Line3Center-ACB(0)'] = ('3F2', '2L ', ' D ', '3R ', " D'", "2L'", ' D ', "3R'", " D'", '3F2')
+                self.myperms2['Oblique-Center-Line3Center-CAD(0)'] = ('3B2', "2R'", ' D ', "3L'", " D'", '2R ', ' D ', '3L ', " D'", '3B2')
+                self.myperms2['Oblique-Center-Line3Center-ABC(0)'] = ('3F2', '2L ', ' F ', '3D2', " F'", "2L'", ' F ', '3D2', '3F2', " F'")
+                self.myperms2['Oblique-Center-Line3Center-CDA(0)'] = ('3B2', "2R'", ' F ', '3U2', " F'", '2R ', ' F ', '3U2', '3B2', " F'")
+                self.myperms2['Oblique-Center-Line3Center-ABB(0)'] = ('2F2', '2R2', " F'", "3L'", ' F ', '2R2', " F'", '3L ', '2F2', ' F ')
+                self.myperms2['Oblique-Center-Line3Center-CDD(0)'] = ('2B2', '2L2', " F'", '3R ', ' F ', '2L2', " F'", "3R'", '2B2', ' F ')
+
+                self.myperms2['Oblique-Center-Line3Center-AAB(0)'] = ('2F2', " F'", '2R2', " F'", "3L'", ' F ', '2R2', " F'", '3L ', '2F2', ' F2')
+                self.myperms2['Oblique-Center-Line3Center-CCD(0)'] = ('2B2', " F'", '2L2', " F'", '3R ', ' F ', '2L2', " F'", "3R'", '2B2', ' F2')
+                self.myperms2['Oblique-Center-Line3Center-ABA(0)'] = (' B2', '2F2', '3L ', ' B ', '2R2', " B'", "3L'", ' B ', '2R2', ' B ', '2F2')
+                self.myperms2['Oblique-Center-Line3Center-CDC(0)'] = (' B2', '2B2', "3R'", ' B ', '2L2', " B'", '3R ', ' B ', '2L2', ' B ', '2B2')
+
+
+
+            self.myperms2['OuterCenterBar-A'] = (' F2', '2R ', ' F2', ' D2', ' B2', '2L ', ' B2', ' D2')
+            self.myperms2['OuterCenterBar-B'] = (' D2', ' B2', "2L'", ' B2', ' D2', ' F2', "2R'", ' F2')
+            
+            self.myperms2['OuterCenterBar-C'] = (" F'", '2R ', ' F2', ' D2', ' B2', '2L ', ' B2', ' D2', " F'")
+            self.myperms2['OuterCenterBar-D'] = (' F ', '2R ', ' F2', ' D2', ' B2', '2L ', ' B2', ' D2', ' F ')
+
+            self.myperms2['OuterCenterBar-E'] = (' U ', " F'", '2R ', ' F2', ' D2', ' B2', '2L ', ' B2', ' D2', " F'", " U'")
+            self.myperms2['OuterCenterBar-F'] = (' U ', ' F ', '2R ', ' F2', ' D2', ' B2', '2L ', ' B2', ' D2', ' F ', " U'")
+            self.myperms2['OuterCenterBar-G'] = (" U'", " F'", '2R ', ' F2', ' D2', ' B2', '2L ', ' B2', ' D2', " F'", ' U ')
+            self.myperms2['OuterCenterBar-H'] = (" U'", ' F ', '2R ', ' F2', ' D2', ' B2', '2L ', ' B2', ' D2', ' F ', ' U ')
+    
+            self.myperms2['OuterCenterBar-W'] = ('2R ', ' F2', ' D2', ' B2', '2L ', '2R ', ' B2', ' D2', ' F2', '2L ')
+            self.myperms2['OuterCenterBar-WW'] = (' F ', '2R ', ' F2', ' D2', ' B2', '2L ', '2R ', ' B2', ' D2', ' F2', '2L ', " F'")
+
+            self.myperms2['OuterCenterBar-KA'] = ("2L'", ' B2', ' D2', ' F2', '2R2', ' F2', ' D2', ' B2', "2L'")
+            self.myperms2['OuterCenterBar-KB'] = ("2L ", ' B2', ' D2', ' F2', '2R2', ' F2', ' D2', ' B2', "2L ")
+
+            self.myperms2['OuterCenterBar-JA'] = ("2R "," U2"," F2"," D2","2L'"," D2"," F2"," U2","2R2")
+            self.myperms2['OuterCenterBar-JB'] = ("2R2"," U2"," F2"," D2","2L "," D2"," F2"," U2","2R'")
+
+            self.myperms2['OuterCenterBar-IA'] = (" B2","2R "," U2"," F2"," D2","2L'"," D2"," F2"," U2","2R2"," B2")
+            self.myperms2['OuterCenterBar-IB'] = (" B2","2R2"," U2"," F2"," D2","2L "," D2"," F2"," U2","2R'"," B2")
+            
+            self.myperms2['OuterCenterBar-X'] = ("2L2"," F2"," U2"," F2","2L2"," F2"," U2"," F2")
+            self.myperms2['OuterCenterBar-Y'] = (" F2"," U2"," F2","2L2"," F2"," U2"," F2","2L2")
+            self.myperms2['OuterCenterBar-Z'] = (" U ","2L2"," F2"," U2"," F2","2L2"," F2"," U2"," F2"," U'")
+            self.myperms2['OuterCenterBar-XX'] = ("2R2"," F2"," B2","2L2"," F2"," B2")
+            self.myperms2['OuterCenterBar-ZZ'] = (" U ","2R2"," F2"," B2","2L2"," F2"," B2"," U'")
+
+            
 
     def _register_myperms2_f2l_oll(self):
         """F2L/OLLやCenters条件に応じた手順群を登録する。"""
+        # 命名メモ:
+        # - OuterCenterBar / MidCenterBar は center の bar を動かす family。
+        # - Adjacent3Center / Line3Center は 3面の center を動かす family。
+        # - InOut / InIn / OutOut / Middle-* は各 center の相対位置関係を表す。
         if self.F2L or self.OLL:
             self.myperms2 = {}
             self.myperms2['Q1-'] = (" S "," E "," S'"," E'")
@@ -5099,6 +5046,7 @@ class Rubiks_3:
     
 
     def _init_cube_state_and_moves(self):
+        """盤面初期化・move定義・piece番号表をまとめて構築する。"""
         face_keys = ['U','D','F','B','L','R']
         self._init_surface_size()
         self._init_state_colors()
@@ -5113,8 +5061,7 @@ class Rubiks_3:
         self._apply_side_strips(side_strips)
         self._apply_axis_rotations(side_strips)
         self._finalize_axis_rotations()
-        self._init_piece_indices()
-        self._init_default_colors()
+        self._init_piece_metadata()
 
     def _init_surface_size(self):
         self.surface_num = self.size ** 2
@@ -5279,35 +5226,62 @@ class Rubiks_3:
             self.move[key[:2] + "'"] = np.argsort(self.move[key])
             self.move[key[:2] + "2"] = self.move[key][self.move[key]]
 
-    def _init_piece_indices(self):
-        self.center_num = (self.size - 2) ** 2
-        self.edge_pairs = [((0,0),(2,0)),
-                           ((0,1),(4,0)),
-                           ((0,2),(3,0)),
-                           ((0,3),(5,0)),
-                           ((2,3),(4,1)),
-                           ((4,3),(3,1)),
-                           ((3,3),(5,1)),
-                           ((5,3),(2,1)),
-                           ((1,0),(3,2)),
-                           ((1,1),(4,2)),
-                           ((1,2),(2,2)),
-                           ((1,3),(5,2))]
-        self.AB = AB[self.size]
-        self.CL = [((0,0),(2,3),(4,0)),
-                   ((0,1),(4,3),(3,0)),
-                   ((0,2),(3,3),(5,0)),
-                   ((0,3),(5,3),(2,0)),
-                   ((1,0),(3,1),(4,2)),
-                   ((1,1),(4,1),(2,2)),
-                   ((1,2),(2,1),(5,2)),
-                   ((1,3),(5,1),(3,2))]
-        self.center_index = [(i + self.surface_num * j,) for j in range(6) for i in range(4 * (self.size - 1),self.surface_num)]
-        self.edge_index = [(p[0][0] * self.surface_num + p[0][1] + 4 * ab[0],p[1][0] * self.surface_num + p[1][1] + 4 * ab[1]) for ab in self.AB for p in self.edge_pairs]
-        self.corner_index = [(cl[0][0] * self.surface_num + cl[0][1],cl[1][0] * self.surface_num + cl[1][1],cl[2][0] * self.surface_num + cl[2][1]) for cl in self.CL]
-        self._init_num_to_piece()
+    def _init_piece_metadata(self):
+        """pieceの index 表・番号逆引き・完成色をまとめて初期化する。"""
+        self._init_piece_indices()
+        self._init_piece_lookup_tables()
+        self._init_default_colors()
 
-    def _init_num_to_piece(self):
+    def _init_piece_indices(self):
+        """center / edge / corner の index 集合を作る。"""
+        self.center_num = (self.size - 2) ** 2
+        self.edge_pairs = self._build_edge_pairs()
+        self.AB = AB[self.size]
+        self.CL = self._build_corner_locations()
+        self.center_index = self._build_center_indices()
+        self.edge_index = self._build_edge_indices()
+        self.corner_index = self._build_corner_indices()
+
+    def _build_edge_pairs(self):
+        """edge piece を構成する2面の基準位置を返す。"""
+        return [((0,0),(2,0)),
+                ((0,1),(4,0)),
+                ((0,2),(3,0)),
+                ((0,3),(5,0)),
+                ((2,3),(4,1)),
+                ((4,3),(3,1)),
+                ((3,3),(5,1)),
+                ((5,3),(2,1)),
+                ((1,0),(3,2)),
+                ((1,1),(4,2)),
+                ((1,2),(2,2)),
+                ((1,3),(5,2))]
+
+    def _build_corner_locations(self):
+        """corner piece を構成する3面の基準位置を返す。"""
+        return [((0,0),(2,3),(4,0)),
+                ((0,1),(4,3),(3,0)),
+                ((0,2),(3,3),(5,0)),
+                ((0,3),(5,3),(2,0)),
+                ((1,0),(3,1),(4,2)),
+                ((1,1),(4,1),(2,2)),
+                ((1,2),(2,1),(5,2)),
+                ((1,3),(5,1),(3,2))]
+
+    def _build_center_indices(self):
+        """center piece の index 一覧を返す。"""
+        return [(i + self.surface_num * j,) for j in range(6) for i in range(4 * (self.size - 1),self.surface_num)]
+
+    def _build_edge_indices(self):
+        """edge piece の index 一覧を返す。"""
+        return [(p[0][0] * self.surface_num + p[0][1] + 4 * ab[0],p[1][0] * self.surface_num + p[1][1] + 4 * ab[1]) for ab in self.AB for p in self.edge_pairs]
+
+    def _build_corner_indices(self):
+        """corner piece の index 一覧を返す。"""
+        return [(cl[0][0] * self.surface_num + cl[0][1],cl[1][0] * self.surface_num + cl[1][1],cl[2][0] * self.surface_num + cl[2][1]) for cl in self.CL]
+
+    def _init_piece_lookup_tables(self):
+        """盤面 index から piece へ戻る逆引き表を作る。"""
         self.num_to_piece = {}
         for i in range(6 * self.surface_num):
             if i % self.surface_num < 4:
@@ -5318,6 +5292,7 @@ class Rubiks_3:
                 self.num_to_piece[i] = (i,)
 
     def _init_default_colors(self):
+        """完成状態での各 piece の色並びを保存する。"""
         self.default_color = {}
         for x in self.center_index:
             self.default_color[x] = self.state_0[x[0]]
@@ -5327,6 +5302,15 @@ class Rubiks_3:
             self.default_color[x] = self.state_0[x[0]] + self.state_0[x[1]] + self.state_0[x[2]]
 
     def _init_color_keys_and_groups(self):
+        """配色ID・入力次元・評価用グループベクトルを初期化する。"""
+        self._init_piece_color_keys()
+        self._apply_partial_solve_color_keys()
+        self._init_piece_color_lists()
+        self._init_input_vector_metadata()
+        self._init_group_values()
+
+    def _init_piece_color_keys(self):
+        """edge / corner の色並びを整数IDへ変換する表を作る。"""
         # エッジ/コーナー配色の識別ID（色並び→番号）
         self.edge_key = {'RB': 0,'BR': 1,'RY': 2,'YR': 3,
                          'RG': 4,'GR': 5,'RW': 6,'WR': 7,
@@ -5346,6 +5330,8 @@ class Rubiks_3:
                            'OWG':21,'WGO':22,'GOW':23,
                            }
 
+    def _apply_partial_solve_color_keys(self):
+        """F2L / OLL / Edges / Cross 条件に応じて配色IDを上書きする。"""
         if self.F2L or self.Edges or self.Cross:
             self.edge_key['XX'] = 0
             self.corner_key['XXX'] = 0
@@ -5357,81 +5343,122 @@ class Rubiks_3:
             self.corner_key['XRX'] = 1
             self.corner_key['XXR'] = 2
 
-
-            
-
-
+    def _init_piece_color_lists(self):
+        """ID順に並べた色並びリストを作る。"""
         # ID順に色並びを並べたリスト
         self.edge_colors = sorted(self.edge_key.keys(),key = lambda x :self.edge_key[x])
         self.corner_colors = sorted(self.corner_key.keys(),key = lambda x :self.corner_key[x])
 
+    def _init_input_vector_metadata(self):
+        """入力次元と完成状態特徴量を計算する。"""
         # 入力ベクトルの総次元（盤面情報の固定長表現）
         self.ips = 36*self.surface_num + 144 * self.size - 240
         
         # 完全解状態の特徴量（教師データ基準）
-        self.perfect_data = self.makedata()                         
+        self.perfect_data = self.makedata()
 
-
-        # グループごとのマスクベクトルを作成
-        base_vector = np.zeros((1,self.ips),dtype = 'f')
+    def _init_group_values(self):
+        """評価用グループごとのマスクベクトルと総和を作る。"""
+        base_vector = self._empty_group_vector()
         self.group_val = {}
         self.total_val = {}
+        group_names = self._group_name_map()
 
-        group_vector = base_vector.copy()
-        group_vector[0,-192:] = self.perfect_data[-192:]
-        self.group_val['A'] = group_vector
         if self.size % 2 == 1:
-            group_vector = base_vector.copy()
-            group_vector[0,36 * self.center_num:36 * self.center_num + 288] = self.perfect_data[36 * self.center_num:36 * self.center_num + 288]
-            self.group_val['B'] = group_vector
-            if self.size >= 5:
-                group_vector = base_vector.copy()
-                group_vector[0,36 * self.center_num + 288:36 * self.center_num + 864] = self.perfect_data[36 * self.center_num + 288:36 * self.center_num + 864]
-                self.group_val['C'] = group_vector
-                if self.size == 7:
-                    group_vector = base_vector.copy()
-                    group_vector[0,36 * self.center_num + 864:-192] = self.perfect_data[36 * self.center_num + 864:-192]
-                    self.group_val['c'] = group_vector
-                else:
-                    self.group_val['c'] = base_vector.copy()
-
-            else:
-                self.group_val['C'] = base_vector.copy()
-                self.group_val['c'] = base_vector.copy()
-            
+            self._init_group_values_for_odd_size(group_names, base_vector)
         else:
-            self.group_val['B'] = base_vector.copy()
-            if self.size >= 4:      
-                group_vector = base_vector.copy()
-                group_vector[0,36 * self.center_num:36 * self.center_num + 576] = self.perfect_data[36 * self.center_num:36 * self.center_num + 576]
-                self.group_val['C'] = group_vector
-                if self.size == 6:
-                    group_vector = base_vector.copy()
-                    group_vector[0,36 * self.center_num + 576:-192] = self.perfect_data[36 * self.center_num + 576:-192]
-                    self.group_val['c'] = group_vector
-                else:
-                    self.group_val['c'] = base_vector.copy()
-
-            else:
-                self.group_val['C'] = base_vector.copy()
-                self.group_val['c'] = base_vector.copy()
-
+            self._init_group_values_for_even_size(group_names, base_vector)
         
-        for key in ['D','d','E','e','F','f','G']:
-            if not self.Centers:
-                group_vector = base_vector.copy()
-                for i in range(6):
-                    for j in self.Group_Nums[key]:
-                        group_vector[0,i + 6 * (i * self.center_num + j - 4 * (self.size - 1))] = 1
-                self.group_val[key] = group_vector
-            else:
-                group_vector = base_vector.copy()
-                self.group_val[key] = group_vector
+        self._init_center_group_values(group_names, base_vector)
         
+        self._set_group_aliases(group_names)
 
         # 各グループのマスク総和（スコア正規化等に利用）
-        for key in ['A','B','C','c','D','d','E','e','F','f','G']:
+        for key in group_names.values():
             self.total_val[key] = np.sum(self.group_val[key])
+        for key in group_names.keys():
+            self.total_val[key] = self.total_val[group_names[key]]
+
+    def _init_group_values_for_odd_size(self, group_names, base_vector):
+        """奇数サイズ用の Corner / MidEdge / Wing グループを初期化する。"""
+        center_feature_start = 36 * self.center_num
+        self.group_val[group_names['A']] = self._group_vector_slice(-192, None)
+        self.group_val[group_names['B']] = self._group_vector_slice(center_feature_start, center_feature_start + 288)
+        if self.size >= 5:
+            self.group_val[group_names['C']] = self._group_vector_slice(center_feature_start + 288, center_feature_start + 864)
+            if self.size == 7:
+                self.group_val[group_names['c']] = self._group_vector_slice(center_feature_start + 864, -192)
+            else:
+                self._set_empty_group(group_names['c'], base_vector)
+        else:
+            self._set_empty_group(group_names['C'], base_vector)
+            self._set_empty_group(group_names['c'], base_vector)
+
+    def _init_group_values_for_even_size(self, group_names, base_vector):
+        """偶数サイズ用の Corner / MidEdge / Wing グループを初期化する。"""
+        center_feature_start = 36 * self.center_num
+        self.group_val[group_names['A']] = self._group_vector_slice(-192, None)
+        self._set_empty_group(group_names['B'], base_vector)
+        if self.size >= 4:
+            self.group_val[group_names['C']] = self._group_vector_slice(center_feature_start, center_feature_start + 576)
+            if self.size == 6:
+                self.group_val[group_names['c']] = self._group_vector_slice(center_feature_start + 576, -192)
+            else:
+                self._set_empty_group(group_names['c'], base_vector)
+        else:
+            self._set_empty_group(group_names['C'], base_vector)
+            self._set_empty_group(group_names['c'], base_vector)
+
+    def _init_center_group_values(self, group_names, base_vector):
+        """X / Plus / Oblique / CoreCenter の group mask を初期化する。"""
+        for key in ['D','d','E','e','F','f','G']:
+            self.group_val[group_names[key]] = self._center_group_vector(key, base_vector)
+
+    def _center_group_vector(self, key, base_vector):
+        """center 系 group key に対応する mask ベクトルを返す。"""
+        if self.Centers:
+            return base_vector.copy()
+        group_vector = base_vector.copy()
+        for face_index in range(6):
+            for group_index in self.Group_Nums[key]:
+                vector_index = face_index + 6 * (face_index * self.center_num + group_index - 4 * (self.size - 1))
+                group_vector[0,vector_index] = 1
+        return group_vector
+
+    def _set_empty_group(self, group_name, base_vector):
+        """指定した group に空ベクトルを代入する。"""
+        self.group_val[group_name] = base_vector.copy()
+
+    def _empty_group_vector(self):
+        """評価用グループの空ベクトルを返す。"""
+        return np.zeros((1,self.ips),dtype = 'f')
+
+    def _group_vector_slice(self, start, end):
+        """perfect_data の指定区間だけを立てたグループベクトルを返す。"""
+        group_vector = self._empty_group_vector()
+        group_vector[0,start:end] = self.perfect_data[start:end]
+        return group_vector
+
+    def _group_name_map(self):
+        """短い group key と意味ベース名の対応を返す。"""
+        return {
+            'A': 'Corner',
+            'B': 'MidEdge',
+            'C': 'Wing-Layer2',
+            'c': 'Wing-Layer3',
+            'D': 'XCenter-Layer2',
+            'd': 'XCenter-Layer3',
+            'E': 'PlusCenter-Layer2',
+            'e': 'PlusCenter-Layer3',
+            'F': 'ObliqueCenter-A',
+            'f': 'ObliqueCenter-B',
+            'G': 'CoreCenter',
+        }
+
+    def _set_group_aliases(self, group_names):
+        """既存コード互換のため、旧 short key でも同じベクトルを引けるようにする。"""
+        for short_key, long_key in group_names.items():
+            self.group_val[short_key] = self.group_val[long_key]
         
         
     
