@@ -621,8 +621,9 @@ class SolveSessionManager:
                     level = max(0,int(- state.val_lis2[move_index][0] / 5))
                     self.frame.cube.my_scrambles2[level][inverted_moves[-1]].add(inverted_moves)
 
-            for ai_index in range(self.frame.AInum):
-                self.frame.search_data_manager.store_search3_data(ai_index)
+            if state.search_TF or self.frame.AIs[self.frame.AI_idx].search_mode == 'search3':
+                for ai_index in range(self.frame.AInum):
+                    self.frame.search_data_manager.store_search3_data(ai_index)
 
         if state.phase > 0:
             self.frame.success_viewer.put_result(self.frame.success,self.frame.N,self.frame.AI_idx,result_recorded)

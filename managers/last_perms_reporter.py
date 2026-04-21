@@ -69,16 +69,16 @@ class LastPermsReporter:
         display_key = self._display_group_name(key)
         myperms_key = key + '00'
         if myperms_key not in self.frame.cube.myperms:
-            print(display_key,value,set(lengths))
+            print(value,display_key,set(lengths))
             return
 
         current_length = value
         registered_length = len(self.frame.cube.myperms[myperms_key])
         marker = self._comparison_marker(current_length,registered_length)
         if marker == '':
-            print(display_key,current_length,registered_length,lengths)
+            print(current_length,display_key,registered_length,lengths)
         else:
-            print(display_key,current_length,registered_length,marker,lengths)
+            print(current_length,display_key,registered_length,marker,lengths)
 
     def _display_group_name(self, key):
         """short group key は long version に変換して表示する。"""

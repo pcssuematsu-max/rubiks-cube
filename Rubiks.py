@@ -257,67 +257,33 @@ class Frame(Tk.Frame):
             SX = Lis_A + Lis_B + Lis_C + Lis_D + Lis_E + Lis_F
         
 
-            SX = [(" R ","2U "),
-                  ("3F ","2R "),
-                  ("2R ","3F "),
-                  (" y "," R'"," F "),
-                  (" x "," y "," E "," M "),
-                  (" y ","2U "," R2"," F2"),
-                  (" y2","2U "," R2"," F2"),
-                  (" U ","2R "," U'","3F "),
-                  (" U ","2R2"," U'","3F "),
-                  (" R "," U "," M "," U2"," M'"," U "," R'"),
-                  (" R "," U "," M "," U2"," M'"," U "," R'") + self.cube.myperms['ParitySwap-A0-00'],
-                  self.cube.invert_moves(self.cube.myperms['BigRJ(0)00']),
-                  self.cube.invert_moves(self.cube.myperms['BigRJ(2)00']),
-                  self.cube.myperms['Wing3-N04-00'],
-                  self.cube.myperms['Wing3-N06-00'],
-                  self.cube.myperms['Wing3-Q04-00'],
-                  self.cube.myperms['Wing3-Q06-00'],
-                  self.cube.myperms['Wing3-O00-00'],
-                  self.cube.myperms['Wing3-O02-00'],
-                  self.cube.myperms['Wing3-Y00-00'],
-                  self.cube.myperms['Wing3-Y02-00'],
-                  self.cube.myperms['Wing3-U04A-00'],
-                  self.cube.myperms['Wing3-U06A-00'],
-                  self.cube.myperms['Wing3-V04A-00'],
-                  self.cube.myperms['Wing3-V06A-00'],
-                  ("2U "," R2","2U'"," L2","2U "," R2","2U'"," L2"),
-                  (" D'", "2F'", ' D ', ' F ', " D'", "2F ", ' D ', " F'"),
-                  ("2R "," D ","3F "," D'","2R'"," D ","3F'"," D'","2R'"," D ","3F'"," D'","2R "," D ","3F "," D'"),
-                  ("3F2", ' U ', "2R2", " U'", "3F'", ' U ', "2R'", " U'", "3F'", ' U ', "2R'", " U'"),
-                  ("3F2", ' U ', "2R'", " U'", "3F'", ' U ', "2R2", " U'", "3F'", ' U ', "2R'", " U'"),
-                  ("3F'", " D'", "2R'", ' D ', '3F ', " D'", '2R ', ' D ', '3F ', " D'", '2R ', ' D ', "3F'", " D'", "2R'", ' D ', " L'", '2F2', ' L ', '3U2', " L'", '2F2', ' L ', '3U2'),
-                  ('2R ', " U'", '3F ', ' U ', "2R'", " U'", "3F'", '2L2', '2B2', " U'", '3R2', ' U ', '2B2', '2L2', " U'", '3R2', ' U2'),
-                  (" S2", ' U ', "2R2", " U'", " S'", ' U ', "2R'", " U'", " S'", ' U ', "2R'", " U'"),
-                  (" S2", ' U ', "2R'", " U'", " S'", ' U ', "2R2", " U'", " S'", ' U ', "2R'", " U'"),
-                  ("3F2", ' U ', " M2", " U'", "3F'", ' U ', " M'", " U'", "3F'", ' U ', " M'", " U'"),
-                  ("3F2", ' U ', " M'", " U'", "3F'", ' U ', " M2", " U'", "3F'", ' U ', " M'", " U'"),
-                  ("2F2", ' U ', "2R2", " U'", "2F'", ' U ', "2R'", " U'", "2F'", ' U ', "2R'", " U'"),
-                  ("2F2", ' U ', "2R'", " U'", "2F'", ' U ', "2R2", " U'", "2F'", ' U ', "2R'", " U'"),
-
-                  self.cube.invert_moves(self.cube.myperms['Oblique-Center-Opp4-YC-00']),
-                  self.cube.invert_moves(self.cube.myperms['Oblique-Center-Opp4-ZB-00']),
-                  self.cube.invert_moves(self.cube.myperms['Oblique-Center-Opp4-T-00']),
-                  (" M'"," U "," M "," U'"," F'"," M "," F "," M'"),
-                  (" M'"," U "," M "," U'"," F "," M "," F'"," M'"),
-                  (" M'"," U'"," M "," U "," F'"," M "," F "," M'"),
-                  (" M'"," U'"," M "," U "," F "," M "," F'"," M'"),
-
-                  self.cube.myperms['CenterMidEdgeSwap-SG(0)00'],
-                  self.cube.myperms['CenterMidEdgeSwap-SH(0)00'],
-                  self.cube.myperms['CenterMidEdgeSwap-SG(1)00'],
-                  self.cube.myperms['CenterMidEdgeSwap-SH(1)00'],
+            SX = [(" B2"," U'","3F'"," U "," B2","2R "," U'","3F "," U ","2R'"),
+                  ("3B2"," U'","3F'"," U ","3B2","2B2"," U'","3F "," U ","2B2"),
+                  (" F "," U'","3F'"," U "," F'","3B2"," U'","3F "," U ","3B2"),
+                  (" F2"," U'","3F'"," U "," F2"," M2"," U'","3F "," U "," M2"),
+                  (" B2"," U'","3F2"," U "," B2","2R "," U'","3F2"," U ","2R'"),
+                  ("3B2"," U'","3F2"," U ","3B2","2B2"," U'","3F2"," U ","2B2"),
+                  (" F "," U'","3F2"," U "," F'","3B2"," U'","3F2"," U ","3B2"),
+                  (" F2"," U'","3F2"," U "," F2"," M2"," U'","3F2"," U "," M2"),
                   
+                  (" B "," U'"," F "," U "," B'","2F2"," U'"," F'"," U ","2F2"),
+                  ("2F "," U'"," F "," U ","2F'","3B2"," U'"," F'"," U ","3B2"),
 
+                  ("2U2","2F "," U2","2F'","2U2","3U ","2F "," U2","2F'","3U'"),
+                  ("3U ","2F "," U2","2F'","3U'","2U2","2F "," U2","2F'","2U2"),
+
+                  ("2F "," U ","2F'"," D ","2F "," U'"," D'","3R'"," D ","2F'"," D'","3R "),
+                  ("2F2"," U ","2F'"," D ","2F "," U'","2F'","3B'"," D'","2F'"," D ","3B "," D'"),
+
+                  ("2F "," U "," S "," U'","2F'"," U'"," S'"," U "),
+      
 
                 ]
             
 
 
             
-            S0 = [("2L'","2R'",'3D2','2R ',' U ',"2R'",'3D2','2R '," U'","2L "),
-                  ("2B ","2R ","3U ","2R'"," U'","2R ","3U'","2R'"," U ","2B'"),
+            S0 = [
                   
                   
                   
@@ -546,8 +512,8 @@ class Frame(Tk.Frame):
                 self.AIs[i].lr = 1.0e-6
 
             if i >= 10:
-                self.AIs[i].lr = 1.0e-5
-                self.AIs[i].wdlr = 1.0e-4
+                self.AIs[i].lr = 2.0e-6
+                self.AIs[i].wdlr = 1.0e-5
             
                 
                 
