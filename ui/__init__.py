@@ -1,1 +1,1 @@
-"""UI widgets and dialogs."""
+"""UI widgets, dialogs, and frame configuration."""
