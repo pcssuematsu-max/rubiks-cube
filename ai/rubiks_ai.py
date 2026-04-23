@@ -251,92 +251,110 @@ class Rubiks_3_AI:
             
         
     def predict(self,x,policy = True,value = False,loss = False):
+        trunk_out = self._forward_trunk(x, loss = loss)
+
+        if policy and not value:
+            return self._predict_policy_head(trunk_out, loss = loss)
+
+        if value and not policy:
+            return self._predict_value_head(trunk_out, loss = loss)
+
+        policy_out = self._predict_policy_head(trunk_out, loss = loss)
+        value_out = self._predict_value_head(trunk_out, loss = loss)
+        return np.r_[policy_out, value_out]
+
+    def _forward_trunk(self, x, loss = False):
+        """共有 trunk を順伝播して中間表現を返す。"""
         out = x.copy()
         for key in self.layers.keys():
             if loss and key[:2] == 'BN':
                 out = self.layers[key].forward(out,True)
             else:
                 out = self.layers[key].forward(out)
+        return out
 
-        out_m = out
+    def _predict_policy_head(self, trunk_out, loss = False):
+        """policy head を順伝播して policy 出力を返す。"""
+        out = self.policy_mid.forward(trunk_out)
+        if self.Batch_Normalize:
+            out = self.policy_BN.forward(out,loss)
+        out = self.policy_act.forward(out)
+        return self.policy_layer.forward(out)
 
-        if policy and not value:
-            out = self.policy_mid.forward(out_m)
-            if self.Batch_Normalize:
-                out = self.policy_BN.forward(out,loss)
-            out = self.policy_act.forward(out)
-            return self.policy_layer.forward(out)
-        
-        elif not policy and value:
-            out = self.value_mid.forward(out_m)
-            if self.Batch_Normalize:
-                out = self.value_BN.forward(out,loss)
-            out = self.value_act.forward(out)
-            return self.value_layer.forward(out)
-        else:
-            out_p = self.policy_mid.forward(out_m)
-            if self.Batch_Normalize:
-                out_p = self.policy_BN.forward(out_p,loss)
-            out_p = self.policy_act.forward(out_p)
-            
-            out_v = self.value_mid.forward(out_m)
-            if self.Batch_Normalize:
-                out_v = self.value_BN.forward(out_v,loss)
-            out_v = self.value_act.forward(out_v)
-            
-            return np.r_[self.policy_layer.forward(out_p),self.value_layer.forward(out_v)]
+    def _predict_value_head(self, trunk_out, loss = False):
+        """value head を順伝播して value 出力を返す。"""
+        out = self.value_mid.forward(trunk_out)
+        if self.Batch_Normalize:
+            out = self.value_BN.forward(out,loss)
+        out = self.value_act.forward(out)
+        return self.value_layer.forward(out)
 
     def grad(self,x,layer = "WO_V",index = 0):
         self.predict(x,policy = True,value = True,loss = False)
 
         if layer == "WO_V":
-            dO = np.ones((1,x.shape[1]),dtype = 'f')
-            dO = self.value_layer.backward(dO)
-            dO = self.value_act.backward(dO)
-            dO = self.value_mid.backward(dO)
-
-            reverse_key = list(self.layers)
-            reverse_key.reverse()
-            for key in reverse_key:
-                dO = self.layers[key].backward(dO)
+            dO = self._grad_from_value_head(x.shape[1])
 
         elif layer == "WO_P":
-            dO = np.zeros((self.ops,x.shape[1]),dtype = "f")
-            dO[index] = 1
-            dO = self.policy_layer.backward(dO)
-            dO = self.policy_act.backward(dO)
-            dO = self.policy_mid.backward(dO)
-            
-
-            reverse_key = list(self.layers)
-            reverse_key.reverse()
-            for key in reverse_key:
-                dO = self.layers[key].backward(dO)
+            dO = self._grad_from_policy_head(x.shape[1],index)
 
         else:
-            reverse_key = list(self.layers)
-            reverse_key.reverse()
-            backward = False
-            for key in reverse_key:
-                if key == layer:
-                    dO = np.zeros(self.layers[key].out.shape,dtype = 'f')
-                    dO[index] = 1
-                    backward = True
-
-                if backward:
-                    dO = self.layers[key].backward(dO)
+            dO = self._grad_from_hidden_layer(layer,index)
                 
 
         return dO
+
+    def _grad_from_value_head(self, batch_size):
+        """value head 出力から trunk 入力まで勾配を戻す。"""
+        dO = np.ones((1,batch_size),dtype = 'f')
+        dO = self.value_layer.backward(dO)
+        dO = self.value_act.backward(dO)
+        dO = self.value_mid.backward(dO)
+        return self._backprop_through_trunk_layers(dO)
+
+    def _grad_from_policy_head(self, batch_size, index):
+        """policy head の指定 index から trunk 入力まで勾配を戻す。"""
+        dO = np.zeros((self.ops,batch_size),dtype = "f")
+        dO[index] = 1
+        dO = self.policy_layer.backward(dO)
+        dO = self.policy_act.backward(dO)
+        dO = self.policy_mid.backward(dO)
+        return self._backprop_through_trunk_layers(dO)
+
+    def _grad_from_hidden_layer(self, layer, index):
+        """指定した trunk layer の出力から入力側へ勾配を戻す。"""
+        reverse_key = list(self.layers)
+        reverse_key.reverse()
+        backward = False
+        for key in reverse_key:
+            if key == layer:
+                dO = np.zeros(self.layers[key].out.shape,dtype = 'f')
+                dO[index] = 1
+                backward = True
+
+            if backward:
+                dO = self.layers[key].backward(dO)
+        return dO
+
+    def _backprop_through_trunk_layers(self, dO):
+        """共有 trunk layer 群を逆順に backward する。"""
+        reverse_key = list(self.layers)
+        reverse_key.reverse()
+        for key in reverse_key:
+            dO = self.layers[key].backward(dO)
+        return dO
         
     def integrated_grad(self,x,steps = 200,layer = "WO_V",index = 0):
-        X = np.zeros((self.ips,steps),dtype = 'f')
+        interpolated_inputs = self._integrated_grad_inputs(x,steps)
+        gradients = self.grad(interpolated_inputs,layer = layer,index = index)
+        return np.average(gradients,axis = 1)
+
+    def _integrated_grad_inputs(self, x, steps):
+        """完全状態と入力状態の間を結ぶ補間入力列を作る。"""
+        interpolated_inputs = np.zeros((self.ips,steps),dtype = 'f')
         for i in range(steps):
-            X[:,i] = i / steps * self.cube.perfect_data + (1 - i / steps) * x
-
-        dO = self.grad(X,layer = layer,index = index)
-
-        return np.average(dO,axis = 1)
+            interpolated_inputs[:,i] = i / steps * self.cube.perfect_data + (1 - i / steps) * x
+        return interpolated_inputs
 
     
 
@@ -759,18 +777,17 @@ class Rubiks_3_AI:
     def _torch_device(self):
         if hasattr(self, "_torch_device_cache"):
             return self._torch_device_cache
-        if torch.backends.mps.is_available():
-            self._torch_device_cache = torch.device("mps")
-        else:
-            self._torch_device_cache = torch.device("cpu")
+        device_name = "mps" if torch.backends.mps.is_available() else "cpu"
+        self._torch_device_cache = torch.device(device_name)
         return self._torch_device_cache
 
     def _torch_params_from_numpy(self, device):
         if self._torch_params_cache is not None and not self._torch_params_dirty and self._torch_params_device == device:
             return self._torch_params_cache
-        params = {}
-        for key in self.params.keys():
-            params[key] = torch.as_tensor(self.params[key], dtype = torch.float32, device = device)
+        params = {
+            key: torch.as_tensor(value, dtype = torch.float32, device = device)
+            for key, value in self.params.items()
+        }
         self._torch_params_cache = params
         self._torch_params_device = device
         self._torch_params_dirty = False
@@ -784,15 +801,16 @@ class Rubiks_3_AI:
             out = W @ out + B.unsqueeze(1)
             out = F_torch.relu(out)
 
-        p = params['WM_P'] @ out + params['BM_P'].unsqueeze(1)
-        p = self._torch_head_act(p)
-        p = params['WO_P'] @ p + params['BO_P'].unsqueeze(1)
-
-        v = params['WM_V'] @ out + params['BM_V'].unsqueeze(1)
-        v = self._torch_head_act(v)
-        v = params['WO_V'] @ v + params['BO_V'].unsqueeze(1)
+        p = self._torch_forward_head(out, params, mid_key = 'WM_P', mid_bias_key = 'BM_P', out_key = 'WO_P', out_bias_key = 'BO_P')
+        v = self._torch_forward_head(out, params, mid_key = 'WM_V', mid_bias_key = 'BM_V', out_key = 'WO_V', out_bias_key = 'BO_V')
 
         return torch.cat([p, v], dim = 0)
+
+    def _torch_forward_head(self, trunk_out, params, mid_key, mid_bias_key, out_key, out_bias_key):
+        """policy/value head を 1 本分だけ順伝播する。"""
+        head_out = params[mid_key] @ trunk_out + params[mid_bias_key].unsqueeze(1)
+        head_out = self._torch_head_act(head_out)
+        return params[out_key] @ head_out + params[out_bias_key].unsqueeze(1)
 
     def _torch_head_act(self, x):
         if self.activation == 'ReLU':

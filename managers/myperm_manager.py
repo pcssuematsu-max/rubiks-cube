@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from functools import reduce
+import tkinter as Tk
+
+from ui.dialogs import MakeMypermOkButton
+
 class MyPermManager:
     """mypermの検索・適用・色キー変換を担当する。"""
 
@@ -41,7 +46,7 @@ class MyPermManager:
         dialog.title('make myperm')
         entry = Tk.Entry(master = dialog,width = 20)
         entry.grid(row = 0,column = 0)
-        button = make_myperm_OK(dialog,self.frame,entry)
+        button = MakeMypermOkButton(dialog,self.frame,entry)
         button.grid(row = 1,column = 0)
 
     def apply_named_myperm(self, myperm_key):
@@ -51,5 +56,4 @@ class MyPermManager:
         for move in self.frame.cube.myperms[myperm_key]:
             self.frame.cube.make_move(move)
         self.frame.set_color(self.frame.cube.state)
-
 

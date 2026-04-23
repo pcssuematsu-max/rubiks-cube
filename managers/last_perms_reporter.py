@@ -13,8 +13,8 @@ class LastPermsReporter:
 
     def lpk(self):
         """last_permsの最短手数を既存mypermsと比較して表示する。"""
-        length_dict,set_dict = self._last_perm_lengths()
-        self._print_length_comparison(length_dict,set_dict)
+        length_dict,set_dict,value_dict = self._last_perm_lengths()
+        self._print_length_comparison(length_dict,set_dict,value_dict)
 
     def lp_show(self, key, N = None):
         """指定keyのlast_permsから、指定手数または最短手数の手順を表示する。"""
@@ -50,35 +50,41 @@ class LastPermsReporter:
 
     def _last_perm_lengths(self):
         """last_permsからkeyごとの全手数リストと最短手数heapを作る。"""
-        length_dict = heapdict()
+        length_dict = {}
+        value_dict = heapdict()
         set_dict = {}
         for key in sorted(self.frame.last_perms.keys()):
             lengths = [len(moves) for moves in self.frame.last_perms[key]]
             set_dict[key] = lengths
             length_dict[key] = min(lengths)
-        return length_dict,set_dict
+            value_dict[key] = min(lengths) * self.frame.last_perms_changed_number[key]
+        return length_dict,set_dict,value_dict
 
-    def _print_length_comparison(self, length_dict, set_dict):
+    def _print_length_comparison(self, length_dict, set_dict,value_dict):
         """最短手数heapを取り出しながら、keyごとの比較結果を表示する。"""
-        while len(length_dict) > 0:
-            key,value = length_dict.popitem()
-            self._print_key_length_comparison(key,value,set_dict[key])
+        print("=======Here are the last perms=======")
+        while len(value_dict) > 0:
+            key,value = value_dict.popitem()
+            length = length_dict[key]
+            self._print_key_length_comparison(key,length,set_dict[key],value)
+        
+        print("=======Here are the last perms=======")
 
-    def _print_key_length_comparison(self, key, value, lengths):
+    def _print_key_length_comparison(self, key, length, lengths,value):
         """1つのkeyについて、last_perms側と登録済みmyperms側の手数を比較表示する。"""
         display_key = self._display_group_name(key)
         myperms_key = key + '00'
         if myperms_key not in self.frame.cube.myperms:
-            print(value,display_key,set(lengths))
+            print(value,length,display_key,set(lengths))
             return
 
-        current_length = value
+        current_length = length
         registered_length = len(self.frame.cube.myperms[myperms_key])
         marker = self._comparison_marker(current_length,registered_length)
         if marker == '':
-            print(current_length,display_key,registered_length,lengths)
+            print(value,current_length,display_key,registered_length,lengths)
         else:
-            print(current_length,display_key,registered_length,marker,lengths)
+            print(value,current_length,display_key,registered_length,marker,lengths)
 
     def _display_group_name(self, key):
         """short group key は long version に変換して表示する。"""

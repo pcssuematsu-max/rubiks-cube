@@ -17,13 +17,13 @@ from managers.search_data import SearchDataManager
 from managers.solve_session import SolveSessionManager, SolveSessionState
 from model.search_result import data
 from ui.control_panel import ControlPanel
-from ui.dialogs import lp_show_key
+from ui.dialogs import LpShowKeyButton
 from ui.frame_config import FrameConfig
 from ui.viewers import (
-    Move_Button,
-    Move_viewer,
-    Prob_viewer,
-    State_viewer,
+    MoveButton,
+    MoveViewer,
+    ProbViewer,
+    StateViewer,
     SuccessViewer,
 )
 
@@ -354,21 +354,21 @@ class Frame(Tk.Frame):
 
         self.movebuttons = {}
         for i, move_key in enumerate(self.move_keys):
-            self.movebuttons[move_key] = Move_Button(self.move_buttons,move_key,self.cube,font,self)
+            self.movebuttons[move_key] = MoveButton(self.move_buttons,move_key,self.cube,font,self)
             self.movebuttons[move_key].grid(row = i % 9 + 1,column = i // 9)
 
     def _build_viewers(self, cube_size):
         """state/move/prob/success viewer を生成して配置する。"""
-        self.SV = State_viewer(self,cube_size)
+        self.SV = StateViewer(self,cube_size)
         self.SV.grid(row = 1,column = 0,columnspan = 2)
-        self.grad_viewer_positive = State_viewer(self,cube_size,mini_mode = True)
+        self.grad_viewer_positive = StateViewer(self,cube_size,mini_mode = True)
         self.grad_viewer_positive.grid(row = 2,column = 0)
-        self.grad_viewer_negative = State_viewer(self,cube_size,mini_mode = True)
+        self.grad_viewer_negative = StateViewer(self,cube_size,mini_mode = True)
         self.grad_viewer_negative.grid(row = 2,column = 1)
-        self.MV = Move_viewer(self)
+        self.MV = MoveViewer(self)
         self.MV.grid(row = 1,column = 2,columnspan = 2)
 
-        self.PV = Prob_viewer(self,self.move_keys)
+        self.PV = ProbViewer(self,self.move_keys)
         self.PV.grid(row = 2,column = 2,sticky = 'nw')
         self.success_viewer = SuccessViewer(self,self.AInum)
         self.success_viewer.grid(row = 2,column = 3,sticky = 'nsew')
@@ -378,6 +378,7 @@ class Frame(Tk.Frame):
         """UI 起動直後の runtime 状態を初期化する。"""
         self.stop = False
         self.last_perms = {}
+        self.last_perms_changed_number = {}
         self.solve_state.reset_session()
         self.data_len = len(self.AIs[0].datas)
 
@@ -562,7 +563,7 @@ class Frame(Tk.Frame):
         Frame.title('show lp')
         E = Tk.Entry(master = Frame,width = 20)
         E.grid(row = 0,column = 0)
-        B = lp_show_key(Frame,self,E)
+        B = LpShowKeyButton(Frame,self,E)
         B.grid(row = 1,column = 0)
 
 

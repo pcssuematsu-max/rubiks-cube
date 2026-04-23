@@ -91,7 +91,7 @@ class SuccessViewer(Tk.Frame):
         return Blue
 
 
-class State_viewer(Tk.Canvas):
+class StateViewer(Tk.Canvas):
     def __init__(self,master,cube_size = 3,mini_mode = False):
         self.cube_size = cube_size
         self.surface_num = cube_size ** 2
@@ -212,7 +212,7 @@ class State_viewer(Tk.Canvas):
         ]
 
 
-class Move_viewer(Tk.Canvas):
+class MoveViewer(Tk.Canvas):
     def __init__(self,master):
         self.r_size = 400
         self.c_size = 700
@@ -337,7 +337,7 @@ class Move_viewer(Tk.Canvas):
         return (len(move_row) - 1) // self.words_in_a_row + 1
 
 
-class Prob_viewer(Tk.Canvas):
+class ProbViewer(Tk.Canvas):
     def __init__(self,master,move_keys):
         self.r_size = 120
         self.c_size = 350
@@ -380,164 +380,97 @@ class Prob_viewer(Tk.Canvas):
         return label_x, value_x, row_y
 
 
+# Backward-compatible aliases during viewer rename migration.
+State_viewer = StateViewer
+Move_viewer = MoveViewer
+Prob_viewer = ProbViewer
 
-DeepRed = '#5F0000'
+
 Red = '#BF0000'
-
-DeepOrange = '#7F3F00'
 Orange = '#FF7F00'
-
-DeepYellow = '#5F5F00'
 Yellow = '#BFBF00'
-
-DeepLime = '#3F7F00'
 Lime = '#7FFF00'
-
-DeepGreen = '#005F00'
 Green = '#00BF00'
-
-DeepAqua = '#003F7F'
 Aqua = '#007FFF'
-
-DeepBlue = '#00007F'
 Blue = '#0000FF'
-
-DeepPurple = '#2F005F'
 Purple = '#5F00BF'
-
-DeepMagenta = '#7F003F'
 Magenta = '#FF007F'
-
-DeepSilver = '#3F3F3F'
 Silver = '#7F7F7F'
-
 LightSilver = '#BFBFBF'
-
 White = '#FFFFFF'
 
+def _color_from_thresholds(value, thresholds, default_color):
+    """閾値表に従って表示色を決める。"""
+    for threshold, color in thresholds:
+        if value > threshold:
+            return color
+    return default_color
+
+
+PROBABILITY_PERCENT_COLORS = [
+    (90, Red),
+    (70, Orange),
+    (50, Yellow),
+    (30, Lime),
+    (10, Green),
+    (7, Aqua),
+    (5, Blue),
+    (3, Purple),
+    (1, Magenta),
+    (0.1, Silver),
+]
+
+SEARCH2_VALUE_COLORS = [
+    (0.0, White),
+    (-20.0, Red),
+    (-40.0, Orange),
+    (-60.0, Yellow),
+    (-80.0, Lime),
+    (-100.0, Green),
+    (-120.0, Aqua),
+    (-140.0, Blue),
+    (-160.0, Purple),
+    (-180.0, Magenta),
+    (-200.0, Silver),
+]
+
+SEARCH3_VALUE_COLORS = [
+    ((0.5) ** (1/4), Red),
+    ((0.5) ** (1/2), Orange),
+    ((0.5) ** (3/4), Yellow),
+    ((0.5) ** (1), Lime),
+    ((0.5) ** (5/4), Green),
+    ((0.5) ** (3/2), Aqua),
+    ((0.5) ** (7/4), Blue),
+    ((0.5) ** (2), Purple),
+    ((0.5) ** (3), Magenta),
+    ((0.5) ** (4), Silver),
+]
+
+
+def color_for_probability_percent(value):
+    """ProbViewer の百分率表示用の色を返す。"""
+    return _color_from_thresholds(value, PROBABILITY_PERCENT_COLORS, LightSilver)
+
+
+def color_for_search2_value(value):
+    """Search2 の value 差分表示用の色を返す。"""
+    return _color_from_thresholds(value, SEARCH2_VALUE_COLORS, LightSilver)
+
+
+def color_for_search3_value(value):
+    """Search3 の value 表示用の色を返す。"""
+    return _color_from_thresholds(value, SEARCH3_VALUE_COLORS, LightSilver)
+
+
+# Backward-compatible aliases during color helper rename migration.
+set_color = color_for_probability_percent
+set_color2 = color_for_search2_value
+set_color3 = color_for_search3_value
 
 
 
-
-
-
-DeepRed = '#5F0000'
-Red = '#BF0000'
-
-DeepOrange = '#7F3F00'
-Orange = '#FF7F00'
-
-DeepYellow = '#5F5F00'
-Yellow = '#BFBF00'
-
-DeepLime = '#3F7F00'
-Lime = '#7FFF00'
-
-DeepGreen = '#005F00'
-Green = '#00BF00'
-
-DeepAqua = '#003F7F'
-Aqua = '#007FFF'
-
-DeepBlue = '#00007F'
-Blue = '#0000FF'
-
-DeepPurple = '#2F005F'
-Purple = '#5F00BF'
-
-DeepMagenta = '#7F003F'
-Magenta = '#FF007F'
-
-DeepSilver = '#3F3F3F'
-Silver = '#7F7F7F'
-
-LightSilver = '#BFBFBF'
-
-White = '#FFFFFF'
-
-
-
-
-
-
-
-def set_color(x):
-    if x > 90:
-        return Red
-    elif x > 70:
-        return Orange
-    elif x > 50:
-        return Yellow
-    elif x > 30:
-        return Lime
-    elif x > 10:
-        return Green
-    elif x > 7:
-        return Aqua
-    elif x > 5:
-        return Blue
-    elif x > 3:
-        return Purple
-    elif x > 1:
-        return Magenta
-    elif x > 0.1:
-        return Silver
-    else:
-        return LightSilver
-
-def set_color2(x):
-    if x > 0.0:
-        return White
-    elif x > -20.0:
-        return Red
-    elif x > -40.0:
-        return Orange
-    elif x > -60.0:
-        return Yellow
-    elif x > -80.0:
-        return Lime
-    elif x > -100.0:
-        return Green
-    elif x > -120.0:
-        return Aqua
-    elif x > -140.0:
-        return Blue
-    elif x > -160.0:
-        return Purple
-    elif x > -180.0:
-        return Magenta
-    elif x > -200.0:
-        return Silver
-    else:
-        return LightSilver
-
-def set_color3(x):
-    if x > (0.5) ** (1/4):
-        return Red
-    elif x > (0.5) ** (1/2):
-        return Orange
-    elif x > (0.5) ** (3/4):
-        return Yellow
-    elif x > 0.5:
-        return Lime
-    elif x > (0.5) ** (5/4):
-        return Green
-    elif x > (0.5) ** (3/2):
-        return Aqua
-    elif x > (0.5) ** (7/4):
-        return Blue
-    elif x > (0.5) ** (2):
-        return Purple
-    elif x > (0.5) ** (3):
-        return Magenta
-    elif x > (0.5) ** (4):
-        return Silver
-    else:
-        return LightSilver
-
-
-
-class Move_Button(Tk.Button):
+class MoveButton(Tk.Button):
     def __init__(self,master,m,cube,font,frame):
         self.m = m
         Tk.Button.__init__(self,master,text = m,font = font,padx = 1,pady = 1,command = self.make_move)
@@ -550,3 +483,4 @@ class Move_Button(Tk.Button):
 
         
 
+Move_Button = MoveButton

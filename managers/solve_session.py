@@ -29,6 +29,7 @@ class SolveSessionState:
         self.search_TF = False
         self.end_solve = False
         self.last_perfect_key = ''
+        self.last_perfect_changed_number = 0
         self.last_simplified_lis = tuple([])
         self.move_lis = []
         self.key_lis = []
@@ -62,6 +63,7 @@ class SolveSessionState:
         self.search_TF = False
         self.end_solve = False
         self.last_perfect_key = ''
+        self.last_perfect_changed_number = 0
         self.last_simplified_lis = tuple([])
 
 
@@ -150,6 +152,7 @@ class SolveSessionManager:
         state.reset_tracking()
         state.end_solve = False
         state.last_perfect_key = ''
+        state.last_perfect_changed_number = 0
         state.last_simplified_lis = tuple([])
 
     def _advance_solve_step(self, AI):
@@ -340,16 +343,20 @@ class SolveSessionManager:
         """完成局面に対応するmypermキー情報を保存する。"""
         x = self.frame.cube.makedata().reshape(-1,1)
         perfect_key = ''
+        perfect_changed_number = 0;
         state_key = ''.join(self.frame.cube.state)
-        if state_key not in self.frame.myperms_col:
-            for key in self.frame.cube._group_name_map().values():
-                value = self.frame.cube.total_val[key] - (self.frame.cube.group_val[key] @ x)[0][0]
-                if value > 0.01:
-                    perfect_key += key + '(' + str(int(round(value,0))) + ')'
-        else:
+
+        for key in self.frame.cube._group_name_map().values():
+            value = self.frame.cube.total_val[key] - (self.frame.cube.group_val[key] @ x)[0][0]
+            if value > 0.01:
+                perfect_key += key + '(' + str(int(round(value,0))) + ')'
+                perfect_changed_number += int(round(value,0))
+                
+        if state_key in self.frame.myperms_col:
             perfect_key = self.frame.myperms_col[state_key][:-2]
             simplified_lis = self.frame.cube.transform(simplified_lis,int(self.frame.myperms_col[state_key][-2:]))
         self.frame.solve_state.last_perfect_key = perfect_key
+        self.frame.solve_state.last_perfect_changed_number = perfect_changed_number
         self.frame.solve_state.last_simplified_lis = tuple(simplified_lis)
         return simplified_lis
 
@@ -608,6 +615,7 @@ class SolveSessionManager:
 
                     if state.last_perfect_key not in self.frame.last_perms:
                         self.frame.last_perms[state.last_perfect_key] = set([])
+                        self.frame.last_perms_changed_number[state.last_perfect_key] = state.last_perfect_changed_number
                     self.frame.last_perms[state.last_perfect_key].add(simplified_moves)
 
             if state.search_TF and self.frame.AIs[self.frame.AI_idx].search_mode == 'search2':

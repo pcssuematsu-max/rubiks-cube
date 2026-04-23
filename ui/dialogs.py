@@ -2,7 +2,7 @@
 
 import tkinter as Tk
 
-class make_myperm_OK(Tk.Button):
+class MakeMypermOkButton(Tk.Button):
     def __init__(self,master,frame,entry):
         Tk.Button.__init__(self,master,text = 'OK',command = self.make_myperm)
         self.frame = frame
@@ -15,7 +15,7 @@ class make_myperm_OK(Tk.Button):
         self.master.destroy()
 
 
-class lp_show_key(Tk.Button):
+class LpShowKeyButton(Tk.Button):
     def __init__(self,master,frame,entry):
         Tk.Button.__init__(self,master,text = 'Show',command = self.show_key)
         self.frame = frame
@@ -27,4 +27,8 @@ class lp_show_key(Tk.Button):
         self.frame.lp_show(text)
         self.master.destroy()
 
+
+# Backward-compatible aliases during dialog rename migration.
+make_myperm_OK = MakeMypermOkButton
+lp_show_key = LpShowKeyButton
 
