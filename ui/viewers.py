@@ -1,10 +1,38 @@
 """Viewer widgets for cube state, moves, and probabilities."""
 
 import tkinter as Tk
+from tkinter import scrolledtext
 
 import numpy as np
 
 from core.cube_constants import R_Nums, inside_size, outside_size
+
+
+class LogViewer(Tk.Frame):
+    """学習ログなどの短いテキストを GUI 上に蓄積表示する。"""
+
+    def __init__(self, master, width = 64, height = 12):
+        Tk.Frame.__init__(self, master, relief = Tk.RIDGE, bd = 4, bg = '#303030')
+        self.text = scrolledtext.ScrolledText(
+            self,
+            width = width,
+            height = height,
+            wrap = Tk.WORD,
+            bg = '#101010',
+            fg = '#E8E8E8',
+            insertbackground = '#E8E8E8',
+            relief = Tk.FLAT,
+            font = ('Menlo', 10),
+        )
+        self.text.pack(fill = 'both', expand = True)
+        self.text.configure(state = Tk.DISABLED)
+
+    def append_line(self, message):
+        """末尾へ 1 行追加し、自動スクロールする。"""
+        self.text.configure(state = Tk.NORMAL)
+        self.text.insert(Tk.END, str(message) + '\n')
+        self.text.see(Tk.END)
+        self.text.configure(state = Tk.DISABLED)
 
 class SuccessViewer(Tk.Frame):
     """AIごとの成功数と、直近のソルブ結果を表示する。"""
@@ -13,9 +41,9 @@ class SuccessViewer(Tk.Frame):
         Tk.Frame.__init__(self,master,relief = Tk.RIDGE,bd = 4,bg = '#303030')
         self.ai_count = ai_count
         self.history = []
-        self.history_limit = 200
+        self.history_limit = 160
         self.history_columns = 40
-        self.history_block = 5
+        self.history_block = 4
         self.font = ('Century Gothic',9,'bold')
         self._build_widgets()
 
@@ -29,7 +57,7 @@ class SuccessViewer(Tk.Frame):
         self.total_label.grid(row = 0,column = 2,sticky = 'w')
         self.ai_label = Tk.Label(self,text = '',font = self.font,fg = '#F0F0F0',bg = '#303030',anchor = 'w',justify = Tk.LEFT)
         self.ai_label.grid(row = 1,column = 0,columnspan = 3,sticky = 'ew')
-        self.history_canvas = Tk.Canvas(self,width = 300,height = 36,bg = '#202020',highlightthickness = 0)
+        self.history_canvas = Tk.Canvas(self,width = 300,height = 28,bg = '#202020',highlightthickness = 0)
         self.history_canvas.grid(row = 2,column = 0,columnspan = 3,sticky = 'ew')
         for column_index in range(3):
             self.grid_columnconfigure(column_index, weight = 1)

@@ -38,7 +38,7 @@ class Rubiks_3_AI:
         self.skip_search = False
         self.skip_difference = 10.0
         self.search_mode = search_mode
-        self.value_target_gamma = 0.95
+        self.value_target_gamma = (1/2) ** (1/20)
         
 
 
@@ -153,6 +153,8 @@ class Rubiks_3_AI:
 
         self.params['WO_V'] = self.value_layer.W
         self.params['BO_V'] = self.value_layer.B
+        
+        self.params['BO_P'][:] = np.random.uniform(-5,5,self.params['BO_P'].shape)
 
         self.v = {}
         for key in self.params.keys():
@@ -195,12 +197,14 @@ class Rubiks_3_AI:
         self.search_num2 = 10000
         self.search_num3 = 1000
         self.search_repeat3 = 10
-        self.search_batch3 = 100
+        self.search_batch3 = 40
+        self.search_depth3 = 200
         self.search3_C = 0.05
         self.perfect_val = 1.0
         self._torch_params_cache = None
         self._torch_params_dirty = True
         self._torch_params_device = None
+        self._search3_policy_transform_cache = {}
         self.search2_engine = Search2Engine(self)
         self.search3_engine = Search3Engine(self)
         self.set_perfect_val()
@@ -359,16 +363,34 @@ class Rubiks_3_AI:
     
 
     def loss(self,d_Lis,transformation = 0,flip_inside = False):
-        Indices, total_steps = self._build_loss_indices(d_Lis)
-        args = np.zeros(total_steps - len(d_Lis),dtype = 'i')
+        loss_inputs = self._build_loss_inputs(
+            d_Lis,
+            transformation = transformation,
+            flip_inside = flip_inside,
+        )
+        out = self._predict_loss_outputs(loss_inputs['x'])
+        return self._compute_search2_losses(out,loss_inputs['args'],loss_inputs['indices'])
+
+    def _build_loss_inputs(self, d_lis, transformation = 0, flip_inside = False):
+        """Search2 学習用の入力テンソルと index 情報を構築する。"""
+        indices, total_steps = self._build_loss_indices(d_lis)
+        args = np.zeros(total_steps - len(d_lis),dtype = 'i')
         x = np.zeros((self.ips,total_steps))
-        self._fill_loss_tensors(d_Lis, transformation, flip_inside, args, x)
-        out = self.predict(x,policy = True,value = True,loss = True)
-        l = self.losslayer.forward(out[:-1],args,np.zeros(0),Indices)
-        l2 = self.losslayer2.forward(out[-1:],Indices)
-        return (l,l2)
+        self._fill_loss_tensors(d_lis, transformation, flip_inside, args, x)
+        return {'indices': indices, 'args': args, 'x': x}
+
+    def _predict_loss_outputs(self, x):
+        """loss 計算用に policy/value 出力をまとめて推論する。"""
+        return self.predict(x,policy = True,value = True,loss = True)
+
+    def _compute_search2_losses(self, out, args, indices):
+        """Search2 用の policy loss と value loss を計算する。"""
+        policy_loss = self.losslayer.forward(out[:-1],args,np.zeros(0),indices)
+        value_loss = self.losslayer2.forward(out[-1:],indices)
+        return (policy_loss,value_loss)
 
     def _build_loss_indices(self, d_Lis):
+        """Search2 loss 用に各サンプルの区切り index を作る。"""
         Indices = [0]
         N = 0
         for d in d_Lis:
@@ -377,26 +399,57 @@ class Rubiks_3_AI:
         return Indices, N
 
     def _fill_loss_tensors(self, d_Lis, transformation, flip_inside, args, x):
-        N_args = 0
-        N_x = 0
-        for d in d_Lis:
-            scramble, moves = self._transform_loss_moves(d, transformation, flip_inside)
-            self._apply_scramble_for_loss(scramble)
-            args[N_args:N_args + len(moves)] = np.array([self.cube.key_to_num[m] for m in moves])
-            x[:,N_x] = self.cube.makedata()
-            N_x = self._apply_moves_and_collect(moves, x, N_x)
-            N_args += len(moves)
+        """Search2 学習データ列をまとめて入力 tensor に展開する。"""
+        arg_index = 0
+        state_index = 0
+        for data_item in d_Lis:
+            arg_index, state_index = self._append_loss_item_tensors(
+                data_item,
+                transformation,
+                flip_inside,
+                args,
+                x,
+                arg_index,
+                state_index,
+            )
+
+    def _append_loss_item_tensors(
+        self,
+        data_item,
+        transformation,
+        flip_inside,
+        args,
+        x,
+        arg_index,
+        state_index,
+    ):
+        """Search2 データ 1 件分の入力 tensor を追記する。"""
+        scramble, moves = self._transform_loss_moves(data_item, transformation, flip_inside)
+        self._apply_scramble_for_loss(scramble)
+        self._write_loss_move_args(moves,args,arg_index)
+        x[:,state_index] = self.cube.makedata()
+        next_state_index = self._apply_moves_and_collect(moves, x, state_index)
+        return arg_index + len(moves), next_state_index
+
+    def _write_loss_move_args(self, moves, args, start_index):
+        """Search2 の move 列を policy 教師ラベル列へ書き込む。"""
+        args[start_index:start_index + len(moves)] = np.array(
+            [self.cube.key_to_num[m] for m in moves]
+        )
 
     def _transform_loss_moves(self, d, transformation, flip_inside):
+        """Search2 データ 1 件分の scramble / move を対称変換する。"""
         scramble = self.cube.transform(d.scramble,transformation,flip_inside)
         moves = self.cube.transform(d.moves,transformation,flip_inside)
         return scramble, moves
 
     def _apply_scramble_for_loss(self, scramble):
+        """loss 計算前に cube を指定 scramble 状態へ戻す。"""
         self.cube.reset()
         self.cube.scramble(0,scramble)
 
     def _apply_moves_and_collect(self, moves, x, start_index):
+        """move を順に適用しながら途中局面の特徴量を追記する。"""
         i = 1
         for m in moves:
             self.cube.make_move(m)
@@ -404,53 +457,65 @@ class Rubiks_3_AI:
             i += 1
         return start_index + len(moves) + 1
 
-    def learn(self,transformation = 0,flip_inside = False):
-        err = 0
-        err2 = 0
-        new_indices = []
-        random.shuffle(self.indices)
-        Len = len(self.indices)
-        Batch_Size = 100
-        Epoch_Num = Len // Batch_Size
-        l0_max = 0.0
-        l1_max = 0.0
-        l1_indices = []
+    def learn(self,transformation = 0,flip_inside = False, progress_callback = None):
+        training_result = self._run_training_epochs(
+            indices = self.indices,
+            data_source = self.datas,
+            train_batch = self._train_batch,
+            transformation = transformation,
+            flip_inside = flip_inside,
+            progress_callback = progress_callback,
+        )
+        err, err2, new_indices, original_len, epoch_num, l1_max = training_result
 
-        for i in range(Epoch_Num):
-            if i % 20 == 0:
-                print(i // 20)
-            batch_indices = self.indices[i*Batch_Size:(i+1)*Batch_Size]
-            d_lis = [self.datas[n] for n in batch_indices]
-            L0, L1, l0_max, l1_max, l1_indices = self._train_batch(d_lis, batch_indices, transformation, flip_inside, l0_max, l1_max, l1_indices)
-            err += L0
-            err2 += L1
-            if L0 > 1.0 or L1 > 0.01:
-                new_indices += batch_indices
-
-        self.indices = new_indices + self.indices[Batch_Size * Epoch_Num:]
+        self.indices = new_indices
         self.set_perfect_val()
-        self.lr_C = min(1,err/Len/10)
+        if original_len > 0:
+            self.lr_C = min(1,err/original_len/10)
 
-        if Epoch_Num == 0:
+        if epoch_num == 0:
             return (0,0,0,0,0)
 
-        if self.Batch_Normalize:
-            self._refresh_bn_stats()
-
-        self._log_weight_stats()
-        self.mark_params_dirty()
-        self.clear_training_cache()
-        return (err / Epoch_Num,err2 / Epoch_Num,len(self.indices),Len)
+        self._finalize_training(progress_callback = progress_callback)
+        return (err / epoch_num,err2 / epoch_num,len(self.indices),original_len)
 
     def loss_search3(self,d_Lis,transformation = 0,flip_inside = False):
-        x, policy_targets, value_targets, sample_weights = self._build_search3_tensors(d_Lis,transformation = transformation,flip_inside = flip_inside)
-        out = self.predict(x,policy = True,value = True,loss = True)
-        l0 = self.losslayer4.forward(out[:-1],policy_targets,sample_weights)
+        search3_inputs = self._build_search3_loss_inputs(
+            d_Lis,
+            transformation = transformation,
+            flip_inside = flip_inside,
+        )
+        out = self._predict_loss_outputs(search3_inputs['x'])
+        return self._compute_search3_losses(
+            out,
+            search3_inputs['policy_targets'],
+            search3_inputs['value_targets'],
+            search3_inputs['sample_weights'],
+        )
+
+    def _build_search3_loss_inputs(self, d_lis, transformation = 0, flip_inside = False):
+        """Search3 学習用の入力テンソル群を構築する。"""
+        x, policy_targets, value_targets, sample_weights = self._build_search3_tensors(
+            d_lis,
+            transformation = transformation,
+            flip_inside = flip_inside,
+        )
+        return {
+            'x': x,
+            'policy_targets': policy_targets,
+            'value_targets': value_targets,
+            'sample_weights': sample_weights,
+        }
+
+    def _compute_search3_losses(self, out, policy_targets, value_targets, sample_weights):
+        """Search3 用の policy loss と value loss を計算する。"""
+        policy_loss = self.losslayer4.forward(out[:-1],policy_targets,sample_weights)
         value_predictions = self.search3_value_sigmoid.forward(out[-1:])
-        l1 = self.losslayer3.forward(value_predictions,value_targets,sample_weights)
-        return (l0,l1)
+        value_loss = self.losslayer3.forward(value_predictions,value_targets,sample_weights)
+        return (policy_loss,value_loss)
 
     def _build_search3_tensors(self, d_Lis, transformation = 0, flip_inside = False):
+        """Search3 学習用の state / policy / value tensor をまとめて作る。"""
         total_steps = self._search3_total_steps(d_Lis)
         x = np.zeros((self.ips,total_steps),dtype = 'f')
         policy_targets = np.zeros((self.ops,total_steps),dtype = 'f')
@@ -459,130 +524,332 @@ class Rubiks_3_AI:
         step_index = 0
 
         for data_item in d_Lis:
-            scramble = self.cube.transform(data_item.scramble,transformation,flip_inside)
-            moves = self.cube.transform(data_item.moves,transformation,flip_inside)
-            if len(moves) == 0:
-                continue
-            self.cube.reset()
-            self.cube.scramble(0,scramble)
-            rewards = np.array(data_item.rewards,dtype = 'f').reshape(-1)
-            for move_index, move_label in enumerate(moves):
-                x[:,step_index] = self.cube.makedata()
-                policy_targets[:,step_index] = self._search3_policy_target(
-                    data_item,
-                    moves,
-                    move_index,
-                    transformation,
-                    flip_inside,
-                )
-                value_targets[0,step_index] = self._search3_value_target(data_item,rewards,move_index,len(moves))
-                sample_weights[0,step_index] = self._search3_step_weight(data_item,move_index)
-                self.cube.make_move(move_label)
-                step_index += 1
+            step_index = self._append_search3_item_tensors(
+                data_item,
+                x,
+                policy_targets,
+                value_targets,
+                sample_weights,
+                step_index,
+                transformation = transformation,
+                flip_inside = flip_inside,
+            )
 
         return x, policy_targets, value_targets, sample_weights
 
+    def _append_search3_item_tensors(
+        self,
+        data_item,
+        x,
+        policy_targets,
+        value_targets,
+        sample_weights,
+        step_index,
+        transformation = 0,
+        flip_inside = False,
+    ):
+        """1 件分の Search3 学習データをテンソルへ追記する。"""
+        scramble, moves = self._transform_search3_item(data_item,transformation,flip_inside)
+        if len(moves) == 0:
+            return step_index
+
+        rewards = self._search3_rewards_array(data_item)
+        self._reset_cube_to_search3_scramble(scramble)
+
+        for move_index, move_label in enumerate(moves):
+            self._write_search3_step_tensors(
+                data_item,
+                moves,
+                rewards,
+                move_index,
+                x,
+                policy_targets,
+                value_targets,
+                sample_weights,
+                step_index,
+                transformation = transformation,
+                flip_inside = flip_inside,
+            )
+            self.cube.make_move(move_label)
+            step_index += 1
+
+        return step_index
+
+    def _transform_search3_item(self, data_item, transformation, flip_inside):
+        """Search3 データ 1 件分の scramble と move を対称変換する。"""
+        scramble = self.cube.transform(data_item.scramble,transformation,flip_inside)
+        moves = self.cube.transform(data_item.moves,transformation,flip_inside)
+        return scramble, moves
+
+    def _search3_rewards_array(self, data_item):
+        """Search3 value target 計算に使う rewards 配列を整形する。"""
+        return np.array(data_item.rewards,dtype = 'f').reshape(-1)
+
+    def _reset_cube_to_search3_scramble(self, scramble):
+        """Search3 学習データの開始局面へ cube を戻す。"""
+        self.cube.reset()
+        self.cube.scramble(0,scramble)
+
+    def _write_search3_step_tensors(
+        self,
+        data_item,
+        moves,
+        rewards,
+        move_index,
+        x,
+        policy_targets,
+        value_targets,
+        sample_weights,
+        step_index,
+        transformation = 0,
+        flip_inside = False,
+    ):
+        """Search3 の 1 手分の特徴量と target を書き込む。"""
+        x[:,step_index] = self.cube.makedata()
+        policy_targets[:,step_index] = self._search3_policy_target(
+            data_item,
+            moves,
+            move_index,
+            transformation,
+            flip_inside,
+        )
+        value_targets[0,step_index] = self._search3_value_target(
+            data_item,
+            rewards,
+            move_index,
+            len(moves),
+        )
+        sample_weights[0,step_index] = self._search3_step_weight(data_item,move_index)
+
     def _search3_total_steps(self, d_Lis):
+        """Search3 データ全体で必要な step 数を数える。"""
         total_steps = 0
         for data_item in d_Lis:
             total_steps += len(data_item.moves)
         return total_steps
 
     def _normalize_search3_policy_target(self, policy_target):
+        """policy target を確率分布に正規化する。"""
         if policy_target is None:
-            return np.ones(self.ops,dtype = 'f') / self.ops
+            return self._uniform_search3_policy_target()
         normalized_target = np.array(policy_target,dtype = 'f').reshape(-1)
         total = np.sum(normalized_target)
         if total <= 0:
-            return np.ones(self.ops,dtype = 'f') / self.ops
+            return self._uniform_search3_policy_target()
         return normalized_target / total
 
+    def _uniform_search3_policy_target(self):
+        """Search3 の policy target が無いときの一様分布を返す。"""
+        return np.ones(self.ops,dtype = 'f') / self.ops
+
     def _search3_policy_target(self, data_item, moves, move_index, transformation, flip_inside):
-        use_soft_target = (
+        if self._use_soft_search3_policy_target(
+            data_item,
+            move_index,
+            transformation,
+            flip_inside,
+        ):
+            return self._transform_search3_policy_target(
+                data_item.policy_target,
+                transformation,
+                flip_inside,
+            )
+        return self._one_hot_search3_policy(moves[move_index])
+
+    def _use_soft_search3_policy_target(self, data_item, move_index, transformation, flip_inside):
+        """soft target をそのまま使う条件か判定する。"""
+        return (
             data_item.search_mode == 'search3'
             and move_index == 0
             and data_item.policy_target is not None
-            and transformation == 0
-            and not flip_inside
         )
-        if use_soft_target:
-            return self._normalize_search3_policy_target(data_item.policy_target)
-        return self._one_hot_search3_policy(moves[move_index])
+
+    def _transform_search3_policy_target(self, policy_target, transformation, flip_inside):
+        """対称変換後の move 空間に合わせて soft policy target を並べ替える。"""
+        normalized_target = self._normalize_search3_policy_target(policy_target)
+        if transformation == 0 and not flip_inside:
+            return normalized_target
+
+        transformed_target = np.zeros_like(normalized_target)
+        move_index_map = self._search3_policy_move_index_map(transformation,flip_inside)
+        for original_index, transformed_index in move_index_map.items():
+            transformed_target[transformed_index] = normalized_target[original_index]
+        return transformed_target
+
+    def _search3_policy_move_index_map(self, transformation, flip_inside):
+        """move index を対称変換後の index へ写す対応表を返す。"""
+        cache_key = (transformation, bool(flip_inside))
+        if cache_key in self._search3_policy_transform_cache:
+            return self._search3_policy_transform_cache[cache_key]
+
+        move_index_map = {}
+        for move_label in self.cube.move_keys:
+            transformed_move = self.cube.transform((move_label,),transformation,flip_inside)
+            transformed_label = transformed_move[0]
+            move_index_map[self.cube.key_to_num[move_label]] = self.cube.key_to_num[transformed_label]
+
+        self._search3_policy_transform_cache[cache_key] = move_index_map
+        return move_index_map
 
     def _one_hot_search3_policy(self, move_label):
+        """指定手を one-hot の policy target に変換する。"""
         policy_target = np.zeros((self.ops,),dtype = 'f')
         policy_target[self.cube.key_to_num[move_label]] = 1.0
         return policy_target
 
     def _search3_value_target(self, data_item, rewards, move_index, move_count):
+        explicit_target = self._explicit_search3_value_target(data_item,move_index)
+        if explicit_target is not None:
+            return explicit_target
+        return self._fallback_search3_value_target(data_item,rewards,move_index,move_count)
+
+    def _explicit_search3_value_target(self, data_item, move_index):
+        """data_item に value_targets があればそこから target を取る。"""
         value_targets = getattr(data_item,'value_targets',None)
-        if value_targets is not None:
-            value_targets = np.array(value_targets,dtype = 'f').reshape(-1)
-            if move_index < value_targets.size:
-                return value_targets[move_index]
-            if value_targets.size > 0:
-                return value_targets[-1]
+        if value_targets is None:
+            return None
+        normalized_targets = np.array(value_targets,dtype = 'f').reshape(-1)
+        if move_index < normalized_targets.size:
+            return normalized_targets[move_index]
+        if normalized_targets.size > 0:
+            return normalized_targets[-1]
+        return None
+
+    def _fallback_search3_value_target(self, data_item, rewards, move_index, move_count):
+        """value_targets が無い場合の reward/value_trace/gamma fallback を返す。"""
+        reward_target = self._reward_based_search3_value_target(rewards,move_index)
+        if reward_target is not None:
+            return reward_target
+
+        bootstrap_target = self._bootstrap_search3_value_target(data_item)
+        if bootstrap_target is not None:
+            return bootstrap_target
+
+        return self._discounted_search3_value_target(move_count,move_index)
+
+    def _reward_based_search3_value_target(self, rewards, move_index):
+        """reward 列があれば、その step に対応する target を返す。"""
         if move_index < rewards.size:
             return rewards[move_index]
         if rewards.size > 0:
             return rewards[-1]
+        return None
+
+    def _bootstrap_search3_value_target(self, data_item):
+        """value_trace から bootstrap 用 target を取り出す。"""
         if len(data_item.value_trace) > 0:
             return data_item.value_trace[-1]
+        return None
+
+    def _discounted_search3_value_target(self, move_count, move_index):
+        """明示 target が無い場合の gamma fallback を返す。"""
         return self.value_target_gamma ** (move_count - move_index - 1)
 
     def _search3_step_weight(self, data_item, move_index):
+        """Search3 学習の 1 手分 sample weight を返す。"""
         sample_weight = getattr(data_item,'sample_weight',1.0)
         if data_item.search_mode == 'search3' and move_index > 0:
             return sample_weight * 0.7
         return sample_weight
 
-    def learn_search3(self,transformation = 0,flip_inside = False):
-        err = 0
-        err2 = 0
-        new_indices = []
-        random.shuffle(self.indices_search3)
-        Len = len(self.indices_search3)
-        Batch_Size = 100
-        Epoch_Num = Len // Batch_Size
-        l0_max = 0.0
-        l1_max = 0.0
-        l1_indices = []
+    def learn_search3(self,transformation = 0,flip_inside = False, progress_callback = None):
+        training_result = self._run_training_epochs(
+            indices = self.indices_search3,
+            data_source = self.datas_search3,
+            train_batch = self._train_batch_search3,
+            transformation = transformation,
+            flip_inside = flip_inside,
+            progress_callback = progress_callback,
+        )
+        err, err2, new_indices, original_len, epoch_num, l1_max = training_result
 
-        for i in range(Epoch_Num):
-            if i % 20 == 0:
-                print(i // 20)
-            batch_indices = self.indices_search3[i*Batch_Size:(i+1)*Batch_Size]
-            d_lis = [self.datas_search3[n] for n in batch_indices]
-            L, l0_max, l1_max, l1_indices = self._train_batch_search3(d_lis, batch_indices, transformation, flip_inside, l0_max, l1_max, l1_indices)
-            err += L[0]
-            err2 += L[1]
-            if L[0] > 1.0 or L[1] > 0.01:
-                new_indices += batch_indices
-
-        self.indices_search3 = new_indices + self.indices_search3[Batch_Size * Epoch_Num:]
-        if Epoch_Num == 0:
+        self.indices_search3 = new_indices
+        if epoch_num == 0:
             return (0,0,0,0)
 
         self.set_perfect_val()
-        self.lr_C = min(1,err/Len/10)
+        if original_len > 0:
+            self.lr_C = min(1,err/original_len/10)
 
+        self._finalize_training(progress_callback = progress_callback)
+        return (err / epoch_num,err2 / epoch_num,len(self.indices_search3),original_len,l1_max)
+
+    def _run_training_epochs(self, indices, data_source, train_batch, transformation, flip_inside, progress_callback = None):
+        """index 列を batch 学習して、残す index と誤差集計を返す。"""
+        batch_size = 100
+        epoch_state = self._init_training_epoch_state(indices,batch_size)
+
+        for epoch_index, batch_indices in self._iter_training_batches(epoch_state['indices'],batch_size,epoch_state['epoch_num']):
+            if epoch_index % 20 == 0:
+                self._report_training_progress(progress_callback, epoch_index // 20)
+            batch_data = [data_source[n] for n in batch_indices]
+            losses, epoch_state = train_batch(
+                batch_data,
+                batch_indices,
+                transformation,
+                flip_inside,
+                epoch_state,
+            )
+            epoch_state['err'] += losses[0]
+            epoch_state['err2'] += losses[1]
+            if self._should_keep_training_batch(losses):
+                epoch_state['new_indices'] += batch_indices
+
+        epoch_state['new_indices'] += epoch_state['indices'][batch_size * epoch_state['epoch_num']:]
+        return (
+            epoch_state['err'],
+            epoch_state['err2'],
+            epoch_state['new_indices'],
+            epoch_state['original_len'],
+            epoch_state['epoch_num'],
+            epoch_state['l1_max'],
+        )
+
+    def _report_training_progress(self, progress_callback, block_index):
+        """学習進捗を callback 経由で通知する。"""
+        if progress_callback is not None:
+            progress_callback(f'epoch-block {block_index}')
+
+    def _init_training_epoch_state(self, indices, batch_size):
+        """学習 epoch の集計用状態を初期化する。"""
+        shuffled_indices = list(indices)
+        random.shuffle(shuffled_indices)
+        return {
+            'indices': shuffled_indices,
+            'original_len': len(shuffled_indices),
+            'epoch_num': len(shuffled_indices) // batch_size,
+            'err': 0.0,
+            'err2': 0.0,
+            'new_indices': [],
+            'l0_max': 0.0,
+            'l1_max': 0.0,
+            'l1_indices': [],
+        }
+
+    def _iter_training_batches(self, indices, batch_size, epoch_num):
+        """学習対象 index を batch 単位で順に返す。"""
+        for epoch_index in range(epoch_num):
+            start = epoch_index * batch_size
+            end = (epoch_index + 1) * batch_size
+            yield epoch_index, indices[start:end]
+
+    def _should_keep_training_batch(self, losses):
+        """誤差が大きい batch を次 epoch に残すか判定する。"""
+        return losses[0] > 1.0 or losses[1] > 0.01
+
+    def _finalize_training(self, progress_callback = None):
+        """学習後の BN 更新、ログ出力、cache 破棄をまとめて行う。"""
         if self.Batch_Normalize:
             self._refresh_bn_stats()
-
-        self._log_weight_stats()
+        self._log_weight_stats(progress_callback = progress_callback)
         self.mark_params_dirty()
         self.clear_training_cache()
-        return (err / Epoch_Num,err2 / Epoch_Num,len(self.indices_search3),Len,l1_max)
 
-    def _train_batch_search3(self, d_lis, batch_indices, transformation, flip_inside, l0_max, l1_max, l1_indices):
+    def _train_batch_search3(self, d_lis, batch_indices, transformation, flip_inside, epoch_state):
         L = self.loss_search3(d_lis,transformation = transformation,flip_inside = flip_inside)
         L0 = L[0] / len(d_lis)
         L1 = L[1] / len(d_lis)
-        if L0 > l0_max:
-            l0_max = L0
-        if L1 > l1_max:
-            l1_max = L1
-            l1_indices = batch_indices.copy()
+        epoch_state = self._update_training_maxima(L0,L1,batch_indices,epoch_state)
 
         dO = self._backprop_policy_search3()
         dO2 = self._backprop_value_search3()
@@ -592,17 +859,13 @@ class Rubiks_3_AI:
         self._update_affine_momentum()
         self._update_bn_momentum()
         self._apply_param_updates()
-        return (L0,L1), l0_max, l1_max, l1_indices
+        return (L0,L1), epoch_state
 
-    def _train_batch(self, d_lis, batch_indices, transformation, flip_inside, l0_max, l1_max, l1_indices):
+    def _train_batch(self, d_lis, batch_indices, transformation, flip_inside, epoch_state):
         L = self.loss(d_lis,transformation = transformation,flip_inside = flip_inside)
         L0 = L[0] / len(d_lis)
         L1 = L[1] / len(d_lis)
-        if L0 > l0_max:
-            l0_max = L0
-        if L1 > l1_max:
-            l1_max = L1
-            l1_indices = batch_indices.copy()
+        epoch_state = self._update_training_maxima(L0,L1,batch_indices,epoch_state)
 
         dO = self._backprop_policy()
         dO2 = self._backprop_value()
@@ -612,7 +875,16 @@ class Rubiks_3_AI:
         self._update_affine_momentum()
         self._update_bn_momentum()
         self._apply_param_updates()
-        return L0, L1, l0_max, l1_max, l1_indices
+        return (L0,L1), epoch_state
+
+    def _update_training_maxima(self, l0, l1, batch_indices, epoch_state):
+        """最大損失 batch の記録を更新する。"""
+        if l0 > epoch_state['l0_max']:
+            epoch_state['l0_max'] = l0
+        if l1 > epoch_state['l1_max']:
+            epoch_state['l1_max'] = l1
+            epoch_state['l1_indices'] = batch_indices.copy()
+        return epoch_state
 
     def _backprop_policy(self):
         dO = self.losslayer.backward()
@@ -658,60 +930,69 @@ class Rubiks_3_AI:
             dO = self.layers[key].backward(dO)
 
     def _update_output_momentum(self):
-        self.v['WO_P'] += self.lr * self.policy_layer.dW
-        self.v['BO_P'] += self.lr * self.policy_layer.dB
-        self.v['WO_V'] += self.lr * self.value_layer.dW
-
-        self.v['WM_P'] += self.lr * self.policy_mid.dW
-        self.v['WM_V'] += self.lr * self.value_mid.dW
-        self.v['BM_P'] += self.lr * self.policy_mid.dB
-        self.v['BM_V'] += self.lr * self.value_mid.dB
-
-        self.h['WO_P'] += self.policy_layer.dW ** 2
-        self.h['BO_P'] += self.policy_layer.dB ** 2
-        self.h['WO_V'] += self.value_layer.dW ** 2
-
-        self.h['WM_P'] += self.policy_mid.dW ** 2
-        self.h['BM_P'] += self.policy_mid.dB ** 2
-        self.h['WM_V'] += self.value_mid.dW ** 2
-        self.h['BM_V'] += self.value_mid.dB ** 2
+        self._accumulate_affine_optimizer_state(self.policy_layer,'WO_P','BO_P')
+        self._accumulate_affine_optimizer_state(self.value_layer,'WO_V','BO_V',update_bias = False)
+        self._accumulate_affine_optimizer_state(self.policy_mid,'WM_P','BM_P')
+        self._accumulate_affine_optimizer_state(self.value_mid,'WM_V','BM_V')
 
         if self.Batch_Normalize:
-            self.v['BNgP'] += self.lr * self.policy_BN.dg
-            self.v['BNbP'] += self.lr * self.policy_BN.db
-            self.v['BNgV'] += self.lr * self.value_BN.dg
-            self.v['BNbV'] += self.lr * self.value_BN.db
+            self._accumulate_bn_optimizer_state(self.policy_BN,'BNgP','BNbP')
+            self._accumulate_bn_optimizer_state(self.value_BN,'BNgV','BNbV')
 
     def _update_affine_momentum(self):
         if self.weight_decay:
-            self.params['WO_P'] -= self.wdlr * self.params['WO_P']
-            self.params['WO_V'] -= self.wdlr * self.params['WO_V']
-            self.params['WM_P'] -= self.wdlr * self.params['WM_P']
+            self._apply_weight_decay('WO_P')
+            self._apply_weight_decay('WO_V')
+            self._apply_weight_decay('WM_P')
         
         for key in self.affines:
             if self.weight_decay:
-                self.params['W' + key[-1]] -= self.wdlr * self.params['W' + key[-1]]
-                
-
-            self.v['W' + key[-1]] += self.lr * self.layers[key].dW
-            self.v['B' + key[-1]] += self.lr * self.layers[key].dB
-
-            self.h['W' + key[-1]] += self.layers[key].dW ** 2
-            self.h['B' + key[-1]] += self.layers[key].dB ** 2
+                self._apply_weight_decay('W' + key[-1])
+            self._accumulate_affine_optimizer_state(
+                self.layers[key],
+                'W' + key[-1],
+                'B' + key[-1],
+            )
 
     def _update_bn_momentum(self):
         for key in self.BNs:
-            self.v['BNg' + key[-1]] += self.lr * self.layers[key].dg
-            self.v['BNb' + key[-1]] += self.lr * self.layers[key].db
+            self._accumulate_bn_optimizer_state(
+                self.layers[key],
+                'BNg' + key[-1],
+                'BNb' + key[-1],
+            )
 
     def _apply_param_updates(self):
         for key in self.v.keys():
-            if self.adam:
-                self.params[key] -= self.v[key] / (np.sqrt(self.h[key]) + 1)
-            else:
-                self.params[key] -= self.v[key]
+            self.params[key] -= self._optimizer_step(key)
             self.v[key] *= self.lr_v
             self.h[key] *= self.lr_h
+
+    def _accumulate_affine_optimizer_state(self, layer, weight_key, bias_key, update_bias = True):
+        """Affine layer の勾配を optimizer 状態へ加算する。"""
+        self._accumulate_weight_optimizer_state(weight_key,layer.dW)
+        if update_bias:
+            self._accumulate_weight_optimizer_state(bias_key,layer.dB)
+
+    def _accumulate_bn_optimizer_state(self, layer, gamma_key, beta_key):
+        """BatchNorm layer の勾配を optimizer 状態へ加算する。"""
+        self._accumulate_weight_optimizer_state(gamma_key,layer.dg)
+        self._accumulate_weight_optimizer_state(beta_key,layer.db)
+
+    def _accumulate_weight_optimizer_state(self, key, grad):
+        """1 パラメータ分の一次/二次モーメントを更新する。"""
+        self.v[key] += self.lr * grad
+        self.h[key] += grad ** 2
+
+    def _apply_weight_decay(self, key):
+        """対象 weight に weight decay を適用する。"""
+        self.params[key] -= self.wdlr * self.params[key]
+
+    def _optimizer_step(self, key):
+        """現在の optimizer 設定に応じた 1 step 分の更新量を返す。"""
+        if self.adam:
+            return self.v[key] / (np.sqrt(self.h[key]) + 1)
+        return self.v[key]
 
     def _refresh_bn_stats(self):
         for key in self.BNs:
@@ -719,13 +1000,20 @@ class Rubiks_3_AI:
         self.policy_BN.set_ms()
         self.value_BN.set_ms()
 
-    def _log_weight_stats(self):
+    def _log_weight_stats(self, progress_callback = None):
         for key in self.v.keys():
             if key[0] == "W":
                 if self.adam:
-                    print(key + ":" + str(np.log10(np.average(self.v[key] ** 2 / (self.h[key] + 1)))) + ",",str(np.max(self.h[key])))
+                    message = (
+                        key + ":" + str(np.log10(np.average(self.v[key] ** 2 / (self.h[key] + 1))))
+                        + ", " + str(np.max(self.h[key]))
+                    )
                 else:
-                    print(key + ":" + str(np.log10(np.average(self.v[key] ** 2))) + ",",str(np.max(self.h[key])))
+                    message = (
+                        key + ":" + str(np.log10(np.average(self.v[key] ** 2)))
+                        + ", " + str(np.max(self.h[key]))
+                    )
+                self._report_training_progress(progress_callback, message)
         
 
     def search2(self,N):

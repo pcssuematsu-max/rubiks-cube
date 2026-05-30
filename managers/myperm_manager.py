@@ -5,6 +5,7 @@ from __future__ import annotations
 from functools import reduce
 import tkinter as Tk
 
+from cube.rubiks_cube import format_myperm_key, make_myperm_key, myperm_base_key
 from ui.dialogs import MakeMypermOkButton
 
 class MyPermManager:
@@ -30,13 +31,13 @@ class MyPermManager:
         if suffix_moves != ():
             return [
                 key for key in self.frame.cube.myperms
-                if key[:len(head)] == head
+                if myperm_base_key(key)[:len(head)] == head
                 and self.frame.cube.myperms[key][-len(suffix_moves):] == suffix_moves
                 and self.frame.cube.myperms[key][:len(prefix_moves)] == prefix_moves
             ]
         return [
             key for key in self.frame.cube.myperms
-            if key[:len(head)] == head
+            if myperm_base_key(key)[:len(head)] == head
             and self.frame.cube.myperms[key][:len(prefix_moves)] == prefix_moves
         ]
 
@@ -49,11 +50,28 @@ class MyPermManager:
         button = MakeMypermOkButton(dialog,self.frame,entry)
         button.grid(row = 1,column = 0)
 
+    def _resolve_myperm_key(self, key):
+        """Resolve text input or legacy key text to an actual myperm key."""
+        if key in self.frame.cube.myperms:
+            return key
+        if isinstance(key, str):
+            base_key = key.strip()
+            default_key = make_myperm_key(base_key, 0)
+            if default_key in self.frame.cube.myperms:
+                return default_key
+            for myperm_key in self.frame.myperms_keys:
+                if format_myperm_key(myperm_key) == base_key:
+                    return myperm_key
+        return None
+
     def apply_named_myperm(self, myperm_key):
         """指定されたmyperm名の手順を実行してStateViewerを更新する。"""
-        if myperm_key not in self.frame.myperms_keys:
+        resolved_key = self._resolve_myperm_key(myperm_key)
+        if resolved_key is None:
             return
-        for move in self.frame.cube.myperms[myperm_key]:
+        for move in self.frame.cube.myperms[resolved_key]:
             self.frame.cube.make_move(move)
+        display_moves = self.frame.cube.format_moves(self.frame.cube.myperms[resolved_key]) if hasattr(self.frame.cube, 'format_moves') else self.frame.cube.myperms[resolved_key]
+        print(display_moves)
         self.frame.set_color(self.frame.cube.state)
 

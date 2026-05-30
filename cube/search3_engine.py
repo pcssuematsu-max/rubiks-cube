@@ -170,6 +170,15 @@ class Search3Engine:
         path_state_keys = {root_node.state_key}
         while True:
             index = node.select_node(self._find_invalid_index(path_moves))
+            if index is None:
+                return {
+                    'resolved': True,
+                    'solved_move': None,
+                    'path_nodes': path_nodes,
+                    'path_indices': path_indices,
+                    'path_moves': path_moves,
+                    'node_value': 0.0,
+                }
             move_label = self.cube.move_keys[index]
             path_indices.append(index)
             path_moves.append(move_label)
@@ -188,6 +197,7 @@ class Search3Engine:
 
             state_key = self._state_key()
             if state_key in path_state_keys:
+                node.blocked[index] = True
                 return {
                     'resolved': True,
                     'solved_move': None,
@@ -307,18 +317,21 @@ class Node:
         self.value = value
         self.val = np.zeros_like(P, dtype='f')
         self.visited = np.zeros_like(P, dtype='i')
+        self.blocked = np.zeros_like(P, dtype=bool)
         self.S = 0
         self.C = C
         self.children = {}
 
     def select_node(self, invalid_index=None):
-        score = np.where(self.visited != 0, self.val / self.visited, 0.5) + self.C * self.P * np.sqrt(max(1, self.S)) / (1 + self.visited)
+        masked = self.blocked.copy()
         if invalid_index is not None:
-            score[invalid_index] = -1000000000
+            masked[invalid_index] = True
+        if np.all(masked):
+            return None
+        score = np.where(self.visited != 0, self.val / self.visited, 0.5) + self.C * self.P * np.sqrt(max(1, self.S)) / (1 + self.visited)
+        score[masked] = -np.inf
         if self.S == 0:
-            if invalid_index is not None:
-                prior = self.P.copy()
-                prior[invalid_index] = -1000000000
-                return np.argmax(prior)
-            return np.argmax(self.P)
+            prior = self.P.copy()
+            prior[masked] = -np.inf
+            return np.argmax(prior)
         return np.argmax(score)

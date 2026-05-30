@@ -37,7 +37,8 @@ class ControlPanel(Tk.Frame):
         self.param_index_entry = self._create_entry(self.param_index_var, row = 1, column = 1)
         self.loadparams_selected_button = self._create_button('loadparams sel', self.frame.loadparams_selected, row = 1, column = 2)
         self.saveparams_selected_button = self._create_button('saveparams sel', self.frame.saveparams_selected, row = 1, column = 3)
-        self.sum_and_var_button = self._create_button('sum&var', self.frame.sum_and_var_from_entry, row = 1, column = 8)
+        self.edit_params_button = self._create_button('edit params', self.frame.open_param_editor, row = 1, column = 8)
+        self.sum_and_var_button = self._create_button('sum&var', self.frame.sum_and_var_from_entry, row = 1, column = 9)
 
     def _build_level_controls(self):
         """level 指定と counter 表示まわりの操作を配置する。"""
@@ -59,7 +60,7 @@ class ControlPanel(Tk.Frame):
         self.grad_layer_var = Tk.StringVar(value = self.frame.grad_layer)
         self.grad_layer_entry = self._create_entry(self.grad_layer_var, row = 2, column = 5)
         self.show_debug_viewer_button = self._create_button('show viewer', self.frame.show_debug_viewer_from_entry, row = 2, column = 6, columnspan = 2)
-        self.open_move_pad_button = self._create_button('manual moves', self.frame.toggle_move_pad, row = 2, column = 8)
+        self.open_move_pad_button = self._create_button('manual moves', self.frame.toggle_move_pad, row = 2, column = 8, columnspan = 2)
 
     def _create_button(self, text, command, row, column, columnspan = 1):
         """共通スタイルの Button を作って grid 配置する。"""
@@ -88,7 +89,6 @@ class ControlPanel(Tk.Frame):
 
     def _configure_columns(self):
         """ControlPanel内の各列を横方向に均等に伸縮させる。"""
-        for column_index in range(9):
+        for column_index in range(10):
             self.grid_columnconfigure(column_index, weight = 1)
-
 

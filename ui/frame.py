@@ -7,6 +7,7 @@ import numpy as np
 import tkinter as Tk
 
 from ai.rubiks_ai import Rubiks_3_AI
+from megaminx.cube import MegaminxCube
 from cube.rubiks_cube import Rubiks_3
 from managers.debug_analysis import DebugAnalysisManager
 from managers.last_perms_reporter import LastPermsReporter
@@ -17,9 +18,11 @@ from managers.search_data import SearchDataManager
 from managers.solve_session import SolveSessionManager, SolveSessionState
 from model.search_result import data
 from ui.control_panel import ControlPanel
-from ui.dialogs import LpShowKeyButton
+from ui.dialogs import LpShowKeyButton, ParamEditorDialog
 from ui.frame_config import FrameConfig
+from ui.megaminx.state_viewer import MegaminxStateViewer
 from ui.viewers import (
+    LogViewer,
     MoveButton,
     MoveViewer,
     ProbViewer,
@@ -39,19 +42,26 @@ def build_default_bootstrap_datas(cube_size):
         bootstrap_datas += [("2L'","2R'",'2D2','2R ',' U ',"2R'",'2D2','2R '," U'"),
                             ("2B ","2R ","2U ","2R'"," U'","2R ","2U'","2R'"," U "),
                             ("2U ","2D ","2R2","2U ","2D'","2R2"),
-                            ] * 10
+                            ("2R ","2F2","2R ","2F2","2U2","2R ","2U2"),
+                            ] * 20
 
     if cube_size in [5,7]:
         bootstrap_datas += [("2L'","2R'",' E2','2R ',' U ',"2R'",' E2','2R '," U'"),
                             ("2B ","2R "," E'","2R'"," U'","2R "," E ","2R'"," U "),
                             ("2U ","2D "," M2","2U ","2D'"," M2"),
-                            ] * 10
+                            ("2R "," S2","2R "," S2"," E2","2R "," E2"),
+                            ] * 20
 
     if cube_size >= 6:
         bootstrap_datas += [("2L'","2R'",'3D2','2R ',' U ',"2R'",'3D2','2R '," U'"),
                             ("2B ","2R ","3U ","2R'"," U'","2R ","3U'","2R'"," U "),
                             ("2U ","2D ","3R2","2U ","2D'","3R2"),
-                            ] * 10
+                            ("2R ","3F2","2R ","3F2","3U2","2R ","3U2"),
+                            ] * 20
+
+
+    if cube_size >= 6:
+        bootstrap_datas = bootstrap_datas + [cube.flip_inside_moves(x) for x in bootstrap_datas]
 
     return (
         bootstrap_datas
@@ -67,17 +77,11 @@ class Frame(Tk.Frame):
             config = FrameConfig()
 
         self.config = config
+        self.puzzle_type = config.puzzle_type
         self.cube_size = config.cube_size
         Tk.Frame.__init__(self,None)
-        self.master.title('Rubiks')
-        self.cube = Rubiks_3(
-            size = config.cube_size,
-            F2L = config.F2L,
-            OLL = config.OLL,
-            Centers = config.Centers,
-            Edges = config.Edges,
-            Cross = config.Cross,
-        )
+        self.master.title('Megaminx' if self.puzzle_type == 'megaminx' else 'Rubiks')
+        self.cube = self._create_cube(config)
 
         # Register built-in scramble candidates and initialize stage-level state.
         self._register_initial_scrambles(
@@ -88,7 +92,8 @@ class Frame(Tk.Frame):
             Edges = config.Edges,
             Cross = config.Cross,
         )
-        self.transform_random = False
+        self.transform_random = config.transform_random
+        self.search3_progress = self._build_search3_progress_flags(config.search3_progress)
         self._init_stage_settings()
 
         # Build AI instances and apply experiment-specific runtime settings.
@@ -105,13 +110,15 @@ class Frame(Tk.Frame):
             lr_hs = config.lr_hs,
             out_cs = config.out_cs,
             search3_cs = config.search3_cs,
+            pv_ratios = config.pv_ratios,
             transform_idx = config.transform_idx,
             flip_inside_idx = config.flip_inside_idx,
         )
 
         # Prepare myperm lookup tables and bootstrap training data.
         self._init_myperms_metadata()
-        self._append_bootstrap_datas(config.bootstrap_datas)
+        if self.puzzle_type == 'cube':
+            self._append_bootstrap_datas(config.bootstrap_datas)
 
         self.grad_index = 0
         self.grad_mode = "IG"
@@ -137,7 +144,8 @@ class Frame(Tk.Frame):
 
         for stage_index, scramble_group in enumerate(initial_scramble_groups):
             for moves in scramble_group:
-                self.cube.my_scrambles2[stage_index][moves[-1]].add(moves)
+                normalized_moves = self._normalize_move_sequence(moves)
+                self.cube.my_scrambles2[stage_index][normalized_moves[-1]].add(normalized_moves)
 
     def _build_default_scramble_groups(self, F2L = False, OLL = False, Centers = False, Edges = False, Cross = False):
         """cube size と mode に応じた既定の初期 scramble 候補群を作る。"""
@@ -151,6 +159,27 @@ class Frame(Tk.Frame):
         S7 = []
 
         return (S0, S1, S2, S3, S4, S5, S6, S7)
+
+    def _create_cube(self, config):
+        """puzzle type に応じた cube 実装を生成する。"""
+        if self.puzzle_type == 'megaminx':
+            return MegaminxCube(
+                size = config.cube_size,
+                F2L = config.F2L,
+                OLL = config.OLL,
+                Centers = config.Centers,
+                Edges = config.Edges,
+                Cross = config.Cross,
+            )
+
+        return Rubiks_3(
+            size = config.cube_size,
+            F2L = config.F2L,
+            OLL = config.OLL,
+            Centers = config.Centers,
+            Edges = config.Edges,
+            Cross = config.Cross,
+        )
 
     def _init_stage_settings(self):
         """stage 進行と scramble mode の初期値を設定する。"""
@@ -190,11 +219,9 @@ class Frame(Tk.Frame):
         self._init_myval_ai(cube_size)
 
         if priority_list is not None:
-            self.priority_list = priority_list
+            self.priority_list = self._resolve_priority_list(priority_list)
         else:
-            self.priority_list = [
-                ['CoreCenter','ObliqueCenter-A','PlusCenter-Layer2','XCenter-Layer2','ObliqueCenter-B','PlusCenter-Layer3','XCenter-Layer3','Wing-Layer2','Wing-Layer3','Corner','MidEdge']
-                ] * self.AInum
+            self.priority_list = self._default_priority_list()
 
     def _init_myval_ai(self, cube_size):
         """myval 用の補助 AI を既定パラメータで初期化する。"""
@@ -208,10 +235,43 @@ class Frame(Tk.Frame):
         self.myval_AI.params['WO_V'][:] = 1
         self._sync_value_target_gamma()
         self.myval_AI.params['W1'][0] = self.cube.makedata()
+        self.myval_AI.params['W1'][0,-192:] *= 1
         self.myval_AI.params['WM_V'] *= 0
         for i in range(self.myval_AI.params['WM_V'].shape[0]):
             self.myval_AI.params['WM_V'][i,i] = 1
         self.myval_AI.mark_params_dirty()
+
+    def _build_search3_progress_flags(self, search3_progress):
+        """AI ごとの Search3 progress 表示フラグ列を返す。"""
+        if search3_progress is None:
+            return [True] * len(self.AIs)
+        return list(search3_progress)
+
+    def _default_priority_list(self):
+        """puzzle type ごとの既定 priority list を返す。"""
+        if self.puzzle_type == 'megaminx':
+            return [['Corner', 'MidEdge']] * self.AInum
+
+        return [[
+            'CoreCenter', 'ObliqueCenter-A', 'PlusCenter-Layer2',
+            'XCenter-Layer2', 'ObliqueCenter-B', 'PlusCenter-Layer3',
+            'XCenter-Layer3', 'Wing-Layer2', 'Wing-Layer3',
+            'Corner', 'MidEdge',
+        ]] * self.AInum
+
+    def _resolve_priority_list(self, priority_list):
+        """Filter configured priority groups to those supported by the current puzzle."""
+        available_groups = set(getattr(self.cube, 'group_val', {}).keys())
+        if not available_groups:
+            return self._default_priority_list()
+
+        resolved = []
+        for group_row in priority_list:
+            filtered_row = [group for group in group_row if group in available_groups]
+            if not filtered_row:
+                filtered_row = self._default_priority_list()[0].copy()
+            resolved.append(filtered_row)
+        return resolved
 
     def _link_ai_data(self):
         """全 AI と myval AI を cube / datas に接続する。"""
@@ -233,6 +293,7 @@ class Frame(Tk.Frame):
                                    lr_hs = None,
                                    out_cs = None,
                                    search3_cs = None,
+                                   pv_ratios = None,
                                    transform_idx = None,
                                    flip_inside_idx = None):
         """AI ごとの学習・探索設定と transform 設定を適用する。"""
@@ -267,6 +328,11 @@ class Frame(Tk.Frame):
                 self.AIs[i].search3_C = search3_cs[i]
             else:
                 self.AIs[i].search3_C = 0.05
+
+            if pv_ratios is not None:
+                self.AIs[i].PV_ratio = pv_ratios[i]
+            else:
+                self.AIs[i].PV_ratio = 1.0
 
         if transform_idx is not None:
             self.transform_idx = transform_idx
@@ -359,20 +425,30 @@ class Frame(Tk.Frame):
 
     def _build_viewers(self, cube_size):
         """state/move/prob/success viewer を生成して配置する。"""
-        self.SV = StateViewer(self,cube_size)
+        if self.puzzle_type == 'megaminx':
+            viewer_class = MegaminxStateViewer
+            self.SV = viewer_class(self)
+            self.grad_viewer_positive = viewer_class(self, mini_mode = True)
+            self.grad_viewer_negative = viewer_class(self, mini_mode = True)
+        else:
+            viewer_class = StateViewer
+            self.SV = viewer_class(self,cube_size)
+            self.grad_viewer_positive = viewer_class(self,cube_size,mini_mode = True)
+            self.grad_viewer_negative = viewer_class(self,cube_size,mini_mode = True)
+
         self.SV.grid(row = 1,column = 0,columnspan = 2)
-        self.grad_viewer_positive = StateViewer(self,cube_size,mini_mode = True)
         self.grad_viewer_positive.grid(row = 2,column = 0)
-        self.grad_viewer_negative = StateViewer(self,cube_size,mini_mode = True)
         self.grad_viewer_negative.grid(row = 2,column = 1)
         self.MV = MoveViewer(self)
         self.MV.grid(row = 1,column = 2,columnspan = 2)
 
-        self.PV = ProbViewer(self,self.move_keys)
+        self.PV = ProbViewer(self,self._display_move_keys(self.move_keys))
         self.PV.grid(row = 2,column = 2,sticky = 'nw')
         self.success_viewer = SuccessViewer(self,self.AInum)
         self.success_viewer.grid(row = 2,column = 3,sticky = 'nsew')
         self.success_viewer.put_summary(self.success,self.N,self.AI_idx)
+        self.log_viewer = LogViewer(self)
+        self.log_viewer.grid(row = 3,column = 2,columnspan = 2,sticky = 'nsew')
 
     def _init_runtime_state(self):
         """UI 起動直後の runtime 状態を初期化する。"""
@@ -381,6 +457,37 @@ class Frame(Tk.Frame):
         self.last_perms_changed_number = {}
         self.solve_state.reset_session()
         self.data_len = len(self.AIs[0].datas)
+
+    def _display_move_keys(self, move_keys):
+        """Return move labels in puzzle-specific display notation when available."""
+        if hasattr(self.cube, 'format_moves'):
+            return tuple(self.cube.format_moves(move_keys))
+        return tuple(move_keys)
+
+    def display_move_rows(self, move_rows):
+        """Return move rows in puzzle-specific display notation when available."""
+        if not hasattr(self.cube, 'format_moves'):
+            return move_rows
+        return [tuple(self.cube.format_moves(moves)) for moves in move_rows]
+
+    def display_move_sequence(self, moves):
+        """Return one move sequence in puzzle-specific display notation when available."""
+        if hasattr(self.cube, 'format_moves'):
+            return tuple(self.cube.format_moves(moves))
+        return tuple(moves)
+
+    def _normalize_move_sequence(self, moves):
+        """Normalize a move sequence for puzzle-specific internal storage when supported."""
+        if hasattr(self.cube, 'normalize_move_key'):
+            return tuple(self.cube.normalize_move_key(move) for move in moves)
+        return tuple(moves)
+
+    def append_log(self, message):
+        """GUI 上のログビューアへ 1 行追記する。"""
+        if isinstance(message, (tuple, list)) and hasattr(self.cube, 'format_moves'):
+            message = self.cube.format_moves(message)
+        self.log_viewer.append_line(message)
+        self.update()
 
     def initialize(self,N):
         #for key in ['W1','W2','W3','W4','W5','W6','W7','W8','WM_P','WM_V']:
@@ -423,6 +530,7 @@ class Frame(Tk.Frame):
             'param_index_entry',
             'loadparams_selected_button',
             'saveparams_selected_button',
+            'edit_params_button',
             'sum_and_var_button',
             'level_var',
             'level_entry',
@@ -561,10 +669,15 @@ class Frame(Tk.Frame):
     def lp_show_by_button(self):
         Frame = Tk.Toplevel(self)
         Frame.title('show lp')
-        E = Tk.Entry(master = Frame,width = 20)
-        E.grid(row = 0,column = 0)
-        B = LpShowKeyButton(Frame,self,E)
-        B.grid(row = 1,column = 0)
+        E_key = Tk.Entry(master = Frame,width = 20)
+        E_key.grid(row = 0,column = 0)
+        E_length = Tk.Entry(master = Frame,width = 20)
+        E_length.grid(row = 1,column = 0)
+        B = LpShowKeyButton(Frame,self,E_key,E_length)
+        B.grid(row = 2,column = 0)
+
+    def open_param_editor(self):
+        ParamEditorDialog(self)
 
 
     def my_solve(self):

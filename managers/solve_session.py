@@ -8,6 +8,7 @@ from functools import reduce
 import numpy as np
 import tkinter as Tk
 
+from cube.rubiks_cube import format_myperm_key, make_myperm_key, myperm_base_key, myperm_transform_index
 from model.search_result import SearchResult, data
 
 PERFECT_VAL = 1.0e+8
@@ -174,19 +175,25 @@ class SolveSessionManager:
         else:
             search_result = AI.search()
         self._record_search_history(search_result)
+
         if self._should_fallback_from_search3(AI, search_result):
+            if self.frame.search3_progress[self.frame.AI_idx]:
+                self._advance_to_search3_fallback_state(AI, search_result)
+                self._commit_main_progress_to_scramble()
             state.search_TF = False
             return False
+
         reduced_lis = self.frame.cube.reduce(search_result.moves)
         simplified_lis = self.frame.cube.simplify(search_result.moves)
         value_deltas = self._display_value_deltas(search_result)
+
         self._record_search_result(reduced_lis, search_result, value_deltas)
 
         if search_result.succeeded:
             succeeded = True
             state.end_solve = True
             simplified_lis = self._store_perfect_key(simplified_lis)
-
+            
         for move in reduced_lis[0]:
             self.frame.cube.make_move(move)
             self._advance_search_engine(AI, move)
@@ -196,16 +203,19 @@ class SolveSessionManager:
 
         return succeeded
 
-    def _record_search_result(self, reduced_lis, search_result, value_deltas):
+    def _record_search_result(self, reduced_lis, search_result, value_deltas, key_label = None):
         """探索結果をmainログへ追加し、必要なら表示ログにも反映する。"""
         state = self.frame.solve_state
+        if key_label is None:
+            key_label = str(search_result.stats[0]) + '/' + str(search_result.stats[1])
+
         state.move_lis.append(reduced_lis[0])
-        state.key_lis.append(str(search_result.stats[0]) + '/' + str(search_result.stats[1]))
+        state.key_lis.append(key_label)
         state.val_lis.append(search_result.root_value)
         state.val_lis2.append(self._reduce_value_deltas(reduced_lis[1], value_deltas))
         if search_result.search_mode != 'search3':
             state.display_move_lis.append(reduced_lis[0])
-            state.display_key_lis.append(str(search_result.stats[0]) + '/' + str(search_result.stats[1]))
+            state.display_key_lis.append(key_label)
             state.display_root_lis.append(search_result.root_value)
             state.display_val_lis.append(search_result.best_value)
             state.display_val_lis2.append(self._reduce_value_deltas(reduced_lis[1], value_deltas))
@@ -233,6 +243,8 @@ class SolveSessionManager:
 
     def _record_search_attempt_progress(self, AI, attempt_result):
         """Search3の途中経過を表示ログへ反映して即時更新する。"""
+        if not self.frame.search3_progress[self.frame.AI_idx]:
+            return
         self._record_search_display(AI, attempt_result)
         self._refresh_search_attempt_display(AI)
 
@@ -240,8 +252,8 @@ class SolveSessionManager:
         """attempt途中のMoveViewerとStateViewerをその場で描き直す。"""
         state = self.frame.solve_state
         self.frame.MV.set_str(
-            state.s,
-            state.display_move_lis,
+            self.frame.display_move_sequence(state.s),
+            self.frame.display_move_rows(state.display_move_lis),
             state.display_key_lis,
             state.display_root_lis,
             state.display_val_lis,
@@ -331,6 +343,70 @@ class SolveSessionManager:
         """Search3がbudget終了したときにgreedy側へ落とすか判定する。"""
         return self._uses_search3(AI) and search_result.end_reason == 'budget'
 
+    def _advance_to_search3_fallback_state(self, AI, search_result):
+        """Search3 budget 時は、最良評価だった prefix 状態まで進めてから greedy へ落とす。"""
+        fallback_result = self._search3_fallback_result(search_result)
+        if fallback_result is None or len(fallback_result.moves) == 0:
+            return
+
+        reduced_lis = self.frame.cube.reduce(fallback_result.moves)
+        value_deltas = self._display_value_deltas(fallback_result)
+        fallback_key_label = 'S3F:' + str(fallback_result.stats[0]) + '/' + str(fallback_result.stats[1])
+        self._record_search_result(
+            reduced_lis,
+            fallback_result,
+            value_deltas,
+            key_label = fallback_key_label,
+        )
+        for move in reduced_lis[0]:
+            self.frame.cube.make_move(move)
+            self._advance_search_engine(AI, move)
+
+    def _commit_main_progress_to_scramble(self):
+        """main ログ上の進行分を基底 scramble に反映し、以後の greedy 基準にする。"""
+        state = self.frame.solve_state
+        committed_moves = tuple([])
+        for moves in state.move_lis:
+            committed_moves += tuple(moves)
+        if len(committed_moves) > 0:
+            state.s += committed_moves
+        state.move_lis.clear()
+        state.key_lis.clear()
+        state.val_lis.clear()
+        state.val_lis2.clear()
+
+    def _search3_fallback_result(self, search_result):
+        """Search3 の value trace で最良だった prefix だけを fallback 用結果にする。"""
+        best_trace_index = self._best_search3_trace_index(search_result)
+        if best_trace_index <= 0:
+            return None
+
+        fallback_moves = tuple(search_result.moves[:best_trace_index])
+        fallback_value_trace = list(search_result.value_trace[:best_trace_index + 1])
+        fallback_raw_trace = list(search_result.value_trace_raw[:best_trace_index + 1])
+        fallback_best_value = fallback_value_trace[-1]
+        fallback_best_value_raw = fallback_raw_trace[-1]
+        return SearchResult(
+            False,
+            fallback_moves,
+            search_result.root_value,
+            fallback_value_trace,
+            fallback_best_value,
+            search_result.stats,
+            search_mode = 'search3',
+            end_reason = 'budget-greedy',
+            root_value_raw = search_result.root_value_raw,
+            value_trace_raw = fallback_raw_trace,
+            best_value_raw = fallback_best_value_raw,
+        )
+
+    def _best_search3_trace_index(self, search_result):
+        """Search3 fallback 用に、trace 上で最良評価だった state の位置を返す。"""
+        trace = search_result.value_trace_raw
+        if len(trace) == 0:
+            return 0
+        return int(np.argmax(trace))
+
     def _current_search_scramble(self):
         """現在地点までに実行した手を含むスクランブル列を作る。"""
         state = self.frame.solve_state
@@ -353,8 +429,11 @@ class SolveSessionManager:
                 perfect_changed_number += int(round(value,0))
                 
         if state_key in self.frame.myperms_col:
-            perfect_key = self.frame.myperms_col[state_key][:-2]
-            simplified_lis = self.frame.cube.transform(simplified_lis,int(self.frame.myperms_col[state_key][-2:]))
+            matched_key = self.frame.myperms_col[state_key]
+            perfect_key = myperm_base_key(matched_key)
+            transform_index = myperm_transform_index(matched_key)
+            if transform_index is not None:
+                simplified_lis = self.frame.cube.transform(simplified_lis, transform_index)
         self.frame.solve_state.last_perfect_key = perfect_key
         self.frame.solve_state.last_perfect_changed_number = perfect_changed_number
         self.frame.solve_state.last_simplified_lis = tuple(simplified_lis)
@@ -369,9 +448,13 @@ class SolveSessionManager:
                 state.s += tuple(moves)
             self.frame.solve_state.reset_tracking()
 
+
+
     def _advance_greedy_step(self, AI):
         """myvalベースのgreedy選択で次の手順を進める。"""
         state = self.frame.solve_state
+        x = self.frame.cube.makedata().reshape(-1,1)
+        W = -np.log(softmax(AI.predict(x,policy = True,value = False).reshape(-1)) + 1.0e-8)
         if self.frame.AI_idx in list(range(self.frame.AInum)):
             AI = self.frame.myval_AI
 
@@ -380,7 +463,7 @@ class SolveSessionManager:
 
         current_scramble = self._current_search_scramble()
         root_value = state.val_lis[-1]
-        succeeded = self._choose_and_apply_myperms(AI)
+        succeeded = self._choose_and_apply_myperms(AI,W)
         self._record_myval_history(current_scramble, root_value, succeeded)
         return succeeded
 
@@ -404,11 +487,11 @@ class SolveSessionManager:
         state.display_val_lis.append(value[0])
         state.display_val_lis2.append([])
 
-    def _choose_and_apply_myperms(self, AI):
+    def _choose_and_apply_myperms(self, AI,W):
         """候補mypermを評価して、最良の手順を実際に適用する。"""
         x = self.frame.cube.makedata().reshape(-1,1)
         top_group = self._select_top_group(x)
-        myperms_key, top_key = self._collect_myperms_keys(top_group)
+        myperms_key, top_key = self._collect_myperms_keys(top_group,W)
         return self._evaluate_myperms_candidates(AI, myperms_key, top_key)
 
     def _select_top_group(self, x):
@@ -423,25 +506,39 @@ class SolveSessionManager:
                 break
         return top_group
 
-    def _collect_myperms_keys(self, top_group):
+    def _collect_myperms_keys(self, top_group,W):
         """注目groupに対応するmyperm候補キー集合を集める。"""
         myperms_key = set(self.frame.cube.collect_single_move_and_rotate())
         top_key = set([])
-        for piece_index in self.frame.cube.myperms_order[top_group]:
-            piece = self.frame.cube.num_to_piece[piece_index]
-            color_key = reduce(lambda left,right:left+right,[self.frame.cube.state[index] for index in piece])
-            if color_key != self.frame.cube.default_color[piece]:
-                top_key.add((piece,color_key))
-                myperms_key |= set(self.frame.cube.myperms_dict[(piece,color_key)])
-                break
-        return list(myperms_key), top_key
+        for group in self.frame.priority_list[self.frame.AI_idx]:
+            for piece_index in self.frame.cube.myperms_order[group]:
+                piece = self.frame.cube.num_to_piece[piece_index]
+                color_key = reduce(lambda left,right:left+right,[self.frame.cube.state[index] for index in piece])
+                if color_key != self.frame.cube.default_color[piece]:
+                    top_key.add((piece,color_key))
+                    myperms_key |= set(self.frame.cube.myperms_dict[(piece,color_key)])
+                    
+
+        myperms_key = list(myperms_key)
+        myperms_key = sorted(myperms_key,key = lambda x : self._myperms_log_weight(W,x))
+        return myperms_key, top_key
+
+    def _myperms_log_weight(self,W,key):
+        move_sequence = self.frame.cube.myperms[key]
+        weight = 0.0
+        for move in move_sequence:
+            index = self.frame.cube.key_to_num[move]
+            weight += W[index]
+        
+        return weight
 
     def _evaluate_myperms_candidates(self, AI, myperms_key, top_key):
         """myperm候補をvalueで評価し、継続できるかを判定する。"""
         state = self.frame.solve_state
-        eval_num = len(myperms_key)
+        eval_num = 100
         X = np.empty((self.frame.cube.ips,eval_num),dtype = 'f')
-        S = np.empty((eval_num,6 * self.frame.cube.surface_num),dtype = str)
+        state_size = len(self.frame.cube.state)
+        S = np.empty((eval_num,state_size),dtype = str)
 
         total_keys = len(myperms_key)
         idx = 0
@@ -449,7 +546,8 @@ class SolveSessionManager:
         perfect_key = ''
         base = 0
         should_continue = False
-        random.shuffle(myperms_key)
+        x = self.frame.cube.makedata().reshape(-1,1)
+        root_val = AI.predict(x,policy = False,value = True).reshape(-1)[0]
         for key in myperms_key:
             for move in AI.myperms[key]:
                 self.frame.cube.make_move(move)
@@ -470,18 +568,19 @@ class SolveSessionManager:
                 break
 
             if idx == eval_num or base + idx == total_keys:
-                idx = 0
+                batch_count = idx
                 if AI.myval:
-                    values = AI.myval_predict(X,S).reshape(-1)
+                    values = AI.myval_predict(X[:,:batch_count],S[:batch_count,:]).reshape(-1)
                 else:
-                    values = AI.predict(X,policy = False,value = True).reshape(-1)
+                    values = AI.predict(X[:,:batch_count],policy = False,value = True).reshape(-1)
 
-                if len(state.val_lis) == 0 or state.val_lis[-1] + 0.0001 < np.max(values):
-                    should_continue = self._apply_best_myperms(AI, values, myperms_key, base)
+                if root_val + 0.0001 < np.max(values):
+                    should_continue = self._apply_best_myperms(AI, values, myperms_key, base,root_val)
                     if should_continue:
                         break
                 else:
-                    base += eval_num
+                    base += batch_count
+                idx = 0
 
         if solved:
             self._finish_with_perfect_myperms(AI, perfect_key)
@@ -495,14 +594,15 @@ class SolveSessionManager:
                 self.frame.my_scramble.append(state.s)
         return False
 
-    def _apply_best_myperms(self, AI, values, myperms_key, base):
+    def _apply_best_myperms(self, AI, values, myperms_key, base,root_val):
         """評価が最良のmyperm候補を選んでログと状態へ反映する。"""
         state = self.frame.solve_state
-        args = np.where(values >= np.max(values) - 0.0001)[0]
+        args = np.where(values >= np.max(root_val) + 1.0e-4)[0]
         new_keys = []
         new_moves = []
         X = np.empty((self.frame.cube.ips,0),dtype = 'f')
-        S = np.empty((0,6 * self.frame.cube.surface_num),dtype = str)
+        state_size = len(self.frame.cube.state)
+        S = np.empty((0,state_size),dtype = str)
         for arg_index in args[:1]:
             key = myperms_key[arg_index + base]
             move_count = 0
@@ -512,7 +612,7 @@ class SolveSessionManager:
                 x = self.frame.cube.makedata()
                 X = np.c_[X,x.reshape(-1,1)]
                 S = np.r_[S,self.frame.cube.state.reshape(1,-1)]
-                new_keys.append(key + '(' + str(move_count) + ')')
+                new_keys.append(f"{format_myperm_key(key)}({move_count})")
                 new_moves.append(AI.myperms[key][:move_count])
 
             for move in self.frame.cube.invert_moves(AI.myperms[key]):
@@ -544,11 +644,12 @@ class SolveSessionManager:
     def _finish_with_perfect_myperms(self, AI, perfect_key):
         """完成が見つかったmyperm手順をログへ追加してsolve終了にする。"""
         state = self.frame.solve_state
+        display_key = format_myperm_key(perfect_key)
         state.val_lis.append(PERFECT_VAL)
-        state.key_lis.append(perfect_key)
+        state.key_lis.append(display_key)
         state.val_lis2.append([])
         state.move_lis.append(AI.myperms[perfect_key])
-        state.display_key_lis.append(perfect_key)
+        state.display_key_lis.append(display_key)
         state.display_move_lis.append(AI.myperms[perfect_key])
         state.display_root_lis.append(state.display_val_lis[-1])
         state.display_val_lis.append(PERFECT_VAL)
@@ -563,8 +664,8 @@ class SolveSessionManager:
         self.frame.PV.put_val(W)
         self.frame.debug_analysis_manager.show_current_viewer(self.frame.AI_idx,self.frame.cube_size ** 2)
         self.frame.MV.set_str(
-            state.s,
-            state.display_move_lis,
+            self.frame.display_move_sequence(state.s),
+            self.frame.display_move_rows(state.display_move_lis),
             state.display_key_lis,
             state.display_root_lis,
             state.display_val_lis,
@@ -589,34 +690,34 @@ class SolveSessionManager:
             if state.search_TF or self.frame.AIs[self.frame.AI_idx].search_mode == "search2":
                 for moves in state.move_lis:
                     combined_moves += moves
-                    if len(combined_moves) > 0:
-                        rewards = np.zeros(len(combined_moves),dtype = 'f')
-                        rewards[-1] = 10
-                        datas = self.frame.cube.make_transformations(state.s,combined_moves)
-
-                        data_item = data(datas[0][0],datas[1][0],rewards)
-                        data_item.succeeded = True
-                        self.frame.AIs[self.frame.AI_idx].datas.append(data_item)
-
-                        for ai_index in range(self.frame.AInum):
-                            self.frame.AIs[ai_index].indices.append(len(self.frame.AIs[ai_index].datas) - 1)
-
+                    if self._store_search2_training_sample(state.s, combined_moves):
                         state.s += combined_moves
                         combined_moves = ()
 
             if state.search_TF and len(state.move_lis) >= 2:
                 simplified_moves = tuple(state.last_simplified_lis)
                 if simplified_moves not in self.frame.myperms_vals:
-                    myperms_key = state.last_perfect_key + '00'
+                    myperms_key = make_myperm_key(state.last_perfect_key, 0)
+                    improved = (
+                        myperms_key in self.frame.cube.myperms
+                        and len(self.frame.cube.myperms[myperms_key]) > len(simplified_moves)
+                    )
                     if myperms_key in self.frame.cube.myperms and len(self.frame.cube.myperms[myperms_key]) > len(simplified_moves):
                         print(self.frame.AI_idx,state.last_perfect_key,len(simplified_moves),'<-----------')
                     else:
                         print(self.frame.AI_idx,state.last_perfect_key,len(simplified_moves))
-
                     if state.last_perfect_key not in self.frame.last_perms:
                         self.frame.last_perms[state.last_perfect_key] = set([])
                         self.frame.last_perms_changed_number[state.last_perfect_key] = state.last_perfect_changed_number
                     self.frame.last_perms[state.last_perfect_key].add(simplified_moves)
+                    if improved:
+                        self.frame.append_log(
+                            f"last_perm improved: ai={self.frame.AI_idx} key={state.last_perfect_key} len={len(simplified_moves)}"
+                        )
+                    else:
+                        self.frame.append_log(
+                            f"last_perm found: ai={self.frame.AI_idx} key={state.last_perfect_key} len={len(simplified_moves)}"
+                        )
 
             if state.search_TF and self.frame.AIs[self.frame.AI_idx].search_mode == 'search2':
                 max_level = max(1,int(- state.val_lis2[1][0] / 5))
@@ -625,7 +726,7 @@ class SolveSessionManager:
                         self.frame.cube.create_new_set()
 
                 for move_index in range(1,len(state.move_lis)):
-                    inverted_moves = self.frame.cube.invert_moves(state.move_lis[move_index])
+                    inverted_moves = self.frame._normalize_move_sequence(self.frame.cube.invert_moves(state.move_lis[move_index]))
                     level = max(0,int(- state.val_lis2[move_index][0] / 5))
                     self.frame.cube.my_scrambles2[level][inverted_moves[-1]].add(inverted_moves)
 
@@ -658,6 +759,25 @@ class SolveSessionManager:
                 self.frame.learn()
 
         state.phase = -1
+
+    def _store_search2_training_sample(self, scramble, moves):
+        """保存前に手順列を簡約してから Search2 学習データへ追加する。"""
+        simplified_moves = self.frame.cube.simplify(moves)
+        if len(simplified_moves) == 0:
+            return False
+
+        rewards = np.zeros(len(simplified_moves),dtype = 'f')
+        rewards[-1] = 10
+        datas = self.frame.cube.make_transformations(scramble,simplified_moves)
+
+        data_item = data(datas[0][0],datas[1][0],rewards)
+        data_item.succeeded = True
+        self.frame.AIs[self.frame.AI_idx].datas.append(data_item)
+
+        data_index = len(self.frame.AIs[self.frame.AI_idx].datas) - 1
+        for ai_index in range(self.frame.AInum):
+            self.frame.AIs[ai_index].indices.append(data_index)
+        return True
 
 
 

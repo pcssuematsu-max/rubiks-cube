@@ -26,6 +26,7 @@ class LearnManager:
     def learn_one(self, index):
         """1つのAIを学習し、学習後処理を行って結果を返す。"""
         ai = self.frame.AIs[index]
+        self.frame.append_log(f'AI {index} learn start ({ai.search_mode})')
         result = self.run_learning(index,ai)
         self.after_learning(ai)
         return result
@@ -36,11 +37,13 @@ class LearnManager:
             return ai.learn(
                 transformation = self.transformation_for(index),
                 flip_inside = self.flip_inside_for(index),
+                progress_callback = lambda message: self.log_progress(index, message),
             )
 
         return ai.learn_search3(
             transformation = self.transformation_for(index),
             flip_inside = self.flip_inside_for(index),
+            progress_callback = lambda message: self.log_progress(index, message),
         )
 
     def uses_search2_learning(self, ai):
@@ -60,7 +63,10 @@ class LearnManager:
         ai.set_perfect_val()
 
     def log_result(self, index, result):
-        """学習結果を標準出力へ表示する。"""
-        print(index,result)
+        """学習結果を GUI ログへ表示する。"""
+        self.frame.append_log(f'AI {index} result: {result}')
 
+    def log_progress(self, index, message):
+        """学習途中の進捗を GUI ログへ表示する。"""
+        self.frame.append_log(f'AI {index}: {message}')
 

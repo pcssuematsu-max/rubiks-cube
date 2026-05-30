@@ -158,10 +158,60 @@ class DebugAnalysisManager:
             return ai.integrated_grad(x,layer = layer,index = i).reshape(-1)
         return ai.params['W1'][i]
 
+    def _is_megaminx_viewer(self):
+        """Return whether the current cube exposes Megaminx-style feature ordering."""
+        return hasattr(self.frame.cube, 'corner_key') and hasattr(self.frame.cube, 'edge_key') and self.frame.puzzle_type == 'megaminx'
+
+    def _megaminx_viewer_states(self, vector, N):
+        """Map Megaminx feature indices to a viewer state using the Megaminx makedata layout."""
+        state_size = len(self.frame.cube.state)
+        positive_state = np.zeros(state_size, dtype = str)
+        negative_state = np.zeros(state_size, dtype = str)
+        ordered_indices = np.argsort(vector)
+        self._fill_megaminx_viewer_state(positive_state, ordered_indices[N-1::-1])
+        self._fill_megaminx_viewer_state(negative_state, ordered_indices[-N:])
+        return positive_state, negative_state
+
+    def _fill_megaminx_viewer_state(self, state, ordered_indices):
+        """Write selected Megaminx feature indices into a state array."""
+        corner_limit = len(self.frame.cube.corner_index) * 60
+        for vector_index in ordered_indices:
+            if vector_index < corner_limit:
+                self._write_megaminx_corner_to_state(state, vector_index)
+            elif vector_index < self.frame.cube.ips:
+                self._write_megaminx_edge_to_state(state, vector_index - corner_limit)
+
+    def _write_megaminx_corner_to_state(self, state, vector_index):
+        """Write one Megaminx corner feature to the viewer state."""
+        position = self.frame.cube.corner_index[vector_index // 60]
+        color = self.frame.cube.corner_colors[vector_index % 60]
+        state[position[0]] = color[0]
+        state[position[1]] = color[1]
+        state[position[2]] = color[2]
+
+    def _write_megaminx_edge_to_state(self, state, vector_index):
+        """Write one Megaminx edge feature to the viewer state."""
+        position = self.frame.cube.edge_index[vector_index // 60]
+        color = self.frame.cube.edge_colors[vector_index % 60]
+        state[position[0]] = color[0]
+        state[position[1]] = color[1]
+
+    def _supports_vector_viewer(self):
+        """Return whether the current puzzle exposes the Rubiks-style feature metadata this viewer expects."""
+        required_attrs = ('center_index', 'edge_index', 'corner_index', 'edge_colors', 'corner_colors')
+        return all(hasattr(self.frame.cube, attr) for attr in required_attrs)
+
     def _viewer_states(self, vector, N):
         """ベクトルの上位N個と下位N個を、それぞれStateViewer用の状態に変換する。"""
-        positive_state = np.zeros(6 * self.frame.cube.surface_num,dtype = str)
-        negative_state = np.zeros(6 * self.frame.cube.surface_num,dtype = str)
+        if self._is_megaminx_viewer():
+            return self._megaminx_viewer_states(vector, N)
+
+        state_size = 6 * self.frame.cube.surface_num
+        positive_state = np.zeros(state_size,dtype = str)
+        negative_state = np.zeros(state_size,dtype = str)
+        if not self._supports_vector_viewer():
+            return positive_state,negative_state
+
         ordered_indices = np.argsort(vector)
         self._fill_viewer_state(positive_state,ordered_indices[N-1::-1])
         self._fill_viewer_state(negative_state,ordered_indices[-N:])
