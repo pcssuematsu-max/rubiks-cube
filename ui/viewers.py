@@ -11,8 +11,10 @@ from core.cube_constants import R_Nums, inside_size, outside_size
 class LogViewer(Tk.Frame):
     """学習ログなどの短いテキストを GUI 上に蓄積表示する。"""
 
-    def __init__(self, master, width = 64, height = 12):
+    def __init__(self, master, width = 64, height = 12, line_limit = 1200):
         Tk.Frame.__init__(self, master, relief = Tk.RIDGE, bd = 4, bg = '#303030')
+        self.line_limit = max(1,int(line_limit))
+        self.line_count = 0
         self.text = scrolledtext.ScrolledText(
             self,
             width = width,
@@ -31,8 +33,18 @@ class LogViewer(Tk.Frame):
         """末尾へ 1 行追加し、自動スクロールする。"""
         self.text.configure(state = Tk.NORMAL)
         self.text.insert(Tk.END, str(message) + '\n')
+        self.line_count += 1
+        self._trim_old_lines()
         self.text.see(Tk.END)
         self.text.configure(state = Tk.DISABLED)
+
+    def _trim_old_lines(self):
+        """Keep the Tk text buffer bounded during long solve sessions."""
+        excess = self.line_count - self.line_limit
+        if excess <= 0:
+            return
+        self.text.delete('1.0', f'{excess + 1}.0')
+        self.line_count -= excess
 
 class SuccessViewer(Tk.Frame):
     """AIごとの成功数と、直近のソルブ結果を表示する。"""
@@ -242,7 +254,8 @@ class StateViewer(Tk.Canvas):
 
 class MoveViewer(Tk.Canvas):
     def __init__(self,master):
-        self.r_size = 400
+        self.fixed_r_size = 400
+        self.r_size = self.fixed_r_size
         self.c_size = 700
         self.text_color = '#FFFFFF'
         self.move_color = '#000000'
@@ -257,6 +270,9 @@ class MoveViewer(Tk.Canvas):
         self.r_dist = 13
         Tk.Canvas.__init__(self,master,relief = Tk.RAISED, bd = 4,width = self.c_size,height = self.r_size,bg = '#000000')
         self.value_start = 600
+        self.value_width = 95
+        self.key_width = 110
+        self.min_move_columns = 4
 
     def set_str(
         self,
@@ -273,6 +289,7 @@ class MoveViewer(Tk.Canvas):
         self.delete('text')
         self.delete('header')
         self.delete('squares')
+        self._configure_layout(scramble_state, move_rows, key_labels)
         self._draw_cube_state(scramble_state, solved_count, solve_count)
         row_index = self._header_row_index(scramble_state)
         self._draw_header(row_index)
@@ -292,8 +309,8 @@ class MoveViewer(Tk.Canvas):
     def _draw_cube_state(self, state_text, scramble_num, total_num):
         for index, sticker in enumerate(state_text):
             self.create_text(
-                self.c_start_cube_state + self.c_dist * (index % self.words_in_a_row),
-                self.r_start_cube_state + self.r_dist * (index // self.words_in_a_row),
+                self.c_start_cube_state + self.state_c_dist * (index % self.state_words_in_a_row),
+                self.r_start_cube_state + self.r_dist * (index // self.state_words_in_a_row),
                 text = sticker,
                 tags = 'text',
                 fill = self.text_color,
@@ -309,17 +326,17 @@ class MoveViewer(Tk.Canvas):
         )
 
     def _header_row_index(self, state_text):
-        return max((len(state_text) - 1) // self.words_in_a_row - 4,0)
+        return max((len(state_text) - 1) // self.state_words_in_a_row - 4,0)
 
     def _draw_header(self, row_index):
         header_y = 80 + self.r_dist * row_index
-        self.create_text(60,header_y,text = 'Key',tags = 'header',fill = self.text_color,font = (self.font,self.font_size,'bold'))
+        self.create_text(self.key_width * 0.5,header_y,text = 'Key',tags = 'header',fill = self.text_color,font = (self.font,self.font_size,'bold'))
         self.create_text(self.value_start,header_y,text = 'Value',tags = 'header',fill = self.text_color,font = (self.font,self.font_size,'bold'))
-        self.create_text(150,header_y,text = 'Moves',tags = 'header',fill = self.text_color,font = (self.font,self.font_size,'bold'),anchor = 'w')
+        self.create_text(self.c_start,header_y,text = 'Moves',tags = 'header',fill = self.text_color,font = (self.font,self.font_size,'bold'),anchor = 'w')
 
     def _draw_log_row(self, move_index, move_rows, key_labels, root_values, leaf_values, step_values, search_mode, row_index):
         row_y = 100 + self.r_dist * row_index
-        self.create_text(60,row_y,text = key_labels[move_index],tags = 'text',fill = self.text_color,font = (self.font,self.font_size,'bold'))
+        self.create_text(self.key_width * 0.5,row_y,text = key_labels[move_index],tags = 'text',fill = self.text_color,font = (self.font,self.font_size,'bold'))
         self.create_text(self.value_start,row_y,text = self._format_value_text(root_values[move_index], leaf_values[move_index], step_values[move_index]),tags = 'text',fill = self.text_color,font = (self.font,self.font_size,'bold'))
 
         for step_index, move_label in enumerate(move_rows[move_index]):
@@ -355,7 +372,7 @@ class MoveViewer(Tk.Canvas):
         step_value = step_values[step_index + 1]
         if search_mode == 'search2':
             return set_color2(step_value)
-        if search_mode == 'search3':
+        if search_mode in ('search3', 'transformer'):
             return set_color3(step_value)
         return self.text_color
 
@@ -363,6 +380,26 @@ class MoveViewer(Tk.Canvas):
         if len(move_row) == 0:
             return 1
         return (len(move_row) - 1) // self.words_in_a_row + 1
+
+    def _configure_layout(self, scramble_state, move_rows, key_labels):
+        labels = [str(move) for row in move_rows for move in row]
+        max_move_len = max([len(label) for label in labels] + [1])
+        max_key_len = max([len(str(label)) for label in key_labels] + [3])
+        self.c_dist = max(20, min(72, max_move_len * 7 + 10))
+        self.state_c_dist = max(12, min(28, max([len(str(sticker)) for sticker in scramble_state] + [1]) * 7 + 5))
+        self.key_width = max(90, min(180, max_key_len * 7 + 24))
+        self.c_start = self.key_width + 35
+        self.value_start = self.c_size - self.value_width * 0.5
+        move_area_width = max(self.c_dist * self.min_move_columns, self.value_start - self.value_width * 0.5 - self.c_start - 8)
+        self.words_in_a_row = max(self.min_move_columns, int(move_area_width // self.c_dist))
+        state_area_width = max(self.state_c_dist, self.c_size - self.c_start_cube_state - 20)
+        self.state_words_in_a_row = max(1, int(state_area_width // self.state_c_dist))
+        total_rows = self._header_row_index(scramble_state) + 2
+        for row in move_rows[1:]:
+            total_rows += self._row_height(row)
+        required_height = max(260, 110 + self.r_dist * total_rows)
+        self.r_size = self.fixed_r_size
+        self.configure(height = self.fixed_r_size, scrollregion = (0, 0, self.c_size, required_height))
 
 
 class ProbViewer(Tk.Canvas):
@@ -501,7 +538,11 @@ set_color3 = color_for_search3_value
 class MoveButton(Tk.Button):
     def __init__(self,master,m,cube,font,frame):
         self.m = m
-        Tk.Button.__init__(self,master,text = m,font = font,padx = 1,pady = 1,command = self.make_move)
+        if hasattr(cube, 'format_move'):
+            text = cube.format_move(m)
+        else:
+            text = m
+        Tk.Button.__init__(self,master,text = text,font = font,padx = 1,pady = 1,command = self.make_move)
         self.cube = cube
         self.frame = frame
 

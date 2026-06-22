@@ -4,8 +4,8 @@ import random
 from functools import reduce
 
 import numpy as np
-from heapdict import heapdict
 
+from core.scramble_selector import ScrambleSelector
 from cube.rubiks_cube import make_myperm_key
 
 
@@ -268,8 +268,10 @@ class MegaminxCube:
             self.key_to_num[self.move_keys[i]] = i
 
         self.my_scrambles2 = {0:{}}
+        self.my_scramble_changed_piece_keys = {0:{}}
         for key in self.move_keys:
             self.my_scrambles2[0][key] = set([])
+        self.my_scramble_changed_piece_keys[0] = {}
         self.counter = {1:{},2:{},3:{},4:{},5:{},6:{},7:{}}
 
         
@@ -382,6 +384,7 @@ class MegaminxCube:
         
         
         self.myperms_dict = {}
+        self.piece_color_counter = {}
 
         self.default_color = {}
 
@@ -405,12 +408,14 @@ class MegaminxCube:
             for c in self.edge_key:
                 if self.default_color[x] != c:
                     self.myperms_dict[(x,c)] = []
+                    self.piece_color_counter[(x,c)] = 0
 
 
         for x in self.corner_index:
             for c in self.corner_key:
                 if self.default_color[x] != c:
                     self.myperms_dict[(x,c)] = []
+                    self.piece_color_counter[(x,c)] = 0
 
 
         
@@ -438,6 +443,7 @@ class MegaminxCube:
         
         self.myperms_order['Corner'] = [i for i in range(119,-1,-1) if i % 10 < 5]
         self.myperms_order['MidEdge'] = [i for i in range(119,-1,-1) if i % 10 >= 5]
+        self.scramble_selector = ScrambleSelector(self)
 
 
     def collect_single_moves_and_rotate(self):
@@ -484,15 +490,29 @@ class MegaminxCube:
     def create_new_set(self):
         i = len(self.my_scrambles2.keys())
         self.my_scrambles2[i] = {}
+        self.my_scramble_changed_piece_keys[i] = {}
         for k in self.my_scrambles2[0].keys():
             self.my_scrambles2[i][k] = set([]) 
+
+    def register_scramble_sequence(self, level, moves):
+        """Register one scramble sequence with canonical move notation."""
+        normalized_moves = self.normalize_move_sequence(moves)
+        self.my_scrambles2[level][normalized_moves[-1]].add(normalized_moves)
+        self.my_scramble_changed_piece_keys[level][normalized_moves] = tuple(
+            self.get_chenged_pieces_keys_from_moves(normalized_moves)
+        )
+
+    def get_registered_scramble_changed_piece_keys(self, level, moves):
+        """Return cached changed-piece keys for a registered scramble sequence."""
+        normalized_moves = self.normalize_move_sequence(moves)
+        return self.my_scramble_changed_piece_keys[level].get(normalized_moves)
 
     def make_move(self,key):
         internal_key = self.normalize_move_key(key)
         self.state = self.state[self.move[internal_key]]
 
 
-    def scramble(self,N,Move = None,difficult_mode = False,scramble_mode = None,flip = None,rotate = None,swap = False,add_moves = False,transform_N = None,flip_inside = None):
+    def scramble(self,N,Move = None,difficult_mode = False,scramble_mode = None,flip = None,rotate = None,swap = False,add_moves = None,transform_N = None,flip_inside = None,move_count_policy = 'prefer_rare'):
         if Move != None:
             normalized_moves = self.normalize_move_sequence(Move)
             for m in normalized_moves:
@@ -503,9 +523,10 @@ class MegaminxCube:
             move_lis = []
             move_count = self._init_scramble_count()
             transform_idx = 0 if transform_N is None else transform_N
+            move_count_policy = self.scramble_selector.resolve_move_count_policy(move_count_policy, add_moves)
 
             for level_index in range(N):
-                selected_moves = self._guided_scramble_moves(level_index, move_count, add_moves)
+                selected_moves = self._guided_scramble_moves(level_index, move_count, move_count_policy)
                 transformed_moves = self.transform(selected_moves, transform_idx, flip_inside = False, invert = False)
                 move_lis += list(transformed_moves)
                 for move in transformed_moves:
@@ -517,75 +538,70 @@ class MegaminxCube:
 
 
     def _init_scramble_count(self):
-        count = heapdict()
-        for key in self.move_keys:
-            count[key] = 0
-        return count
+        return self.scramble_selector.init_move_count()
 
-    def _guided_scramble_moves(self, level_index, move_count, add_moves):
-        candidates = self._collect_scramble_candidates(level_index)
-        selected_moves = self._select_scramble_candidate(candidates, move_count, add_moves, level_index)
-        self._update_count(move_count, selected_moves)
-        self._update_counter_stats(level_index, selected_moves)
-        return self.normalize_move_sequence(selected_moves)
+    def _guided_scramble_moves(self, level_index, move_count, move_count_policy):
+        return self.scramble_selector.select(level_index, move_count, move_count_policy = move_count_policy)
 
     def _collect_scramble_candidates(self, level_index):
-        sort_level = 1 if 1 in self.my_scrambles2 else 0
-        move_keys = sorted(self.move_keys, key = lambda key: len(self.my_scrambles2[sort_level][key]))
-        candidates = []
-        for key in move_keys:
-            candidates += list(self.my_scrambles2[level_index][key])
-        return candidates
+        level_index = self.scramble_selector.resolve_level(level_index)
+        return self.scramble_selector.collect_candidates(level_index)
 
-    def _select_scramble_candidate(self, candidates, move_count, add_moves, level_index):
-        if add_moves:
-            return self._select_candidate_max(candidates, move_count, level_index)
-        return self._select_candidate_min(candidates, move_count, level_index)
+    def _select_scramble_candidate(self, candidates, move_count, move_count_policy, level_index):
+        if move_count_policy == 'prefer_frequent':
+            return self.scramble_selector._select_candidate_max(candidates, move_count, level_index)
+        return self.scramble_selector._select_candidate_min(candidates, move_count, level_index)
 
     def _select_candidate_max(self, candidates, move_count, level_index):
-        top_score = -1
-        top_count = 0
-        selected = ()
-        for candidate in candidates:
-            normalized_candidate = self.normalize_move_sequence(candidate)
-            score = sum(move_count[move] for move in normalized_candidate)
-            if level_index == 0:
-                seen_count = random.uniform(0,1)
-            else:
-                seen_count = self.counter[level_index].get(normalized_candidate, 0)
-            if top_score < score or (top_score == score and top_count > seen_count):
-                top_score = score
-                top_count = seen_count
-                selected = normalized_candidate
-        return selected
+        return self.scramble_selector._select_candidate_max(candidates, move_count, level_index)
 
     def _select_candidate_min(self, candidates, move_count, level_index):
-        top_score = 1.0e+8
-        top_count = 0
-        selected = ()
-        for candidate in candidates:
-            normalized_candidate = self.normalize_move_sequence(candidate)
-            score = sum(move_count[move] for move in normalized_candidate)
-            if level_index == 0:
-                seen_count = random.uniform(0,1)
-            else:
-                seen_count = self.counter[level_index].get(normalized_candidate, 0)
-            if top_score > score or (top_score == score and top_count > seen_count):
-                top_score = score
-                top_count = seen_count
-                selected = normalized_candidate
-        return selected
+        return self.scramble_selector._select_candidate_min(candidates, move_count, level_index)
+
+    def _evaluate_piece_color_value(self, changed_piece_keys):
+        value = 0
+        for key in changed_piece_keys:
+            value += self.piece_color_counter[key]
+        return value
+
+    def _update_piece_color_counter(self, changed_piece_keys):
+        self.scramble_selector.update_piece_color_counter(changed_piece_keys)
 
     def _update_count(self, move_count, moves):
-        for move in moves:
-            move_count[move] += 1
+        self.scramble_selector.update_count(move_count, moves)
 
     def _update_counter_stats(self, level_index, moves):
-        if level_index != 0 and level_index < 8:
-            if moves not in self.counter[level_index]:
-                self.counter[level_index][moves] = 1
-            else:
-                self.counter[level_index][moves] += 1
+        self.scramble_selector.update_counter_stats(level_index, moves)
+
+    def get_chenged_pieces_keys_from_moves(self, moves):
+        current_state = self.state.copy()
+        self.reset()
+        for move in self.normalize_move_sequence(moves):
+            self.make_move(move)
+        changed_piece_keys = self._get_changed_pieces_keys()
+        self.state = current_state
+        return changed_piece_keys
+
+    def _get_changed_pieces_keys(self):
+        changed_piece_keys = self._register_changed_edge_keys()
+        changed_piece_keys += self._register_changed_corner_keys()
+        return changed_piece_keys
+
+    def _register_changed_edge_keys(self):
+        changed_piece_keys = []
+        for piece in self.edge_index:
+            color = self.state[piece[0]] + self.state[piece[1]]
+            if color != self.default_color[piece]:
+                changed_piece_keys.append((piece, color))
+        return changed_piece_keys
+
+    def _register_changed_corner_keys(self):
+        changed_piece_keys = []
+        for piece in self.corner_index:
+            color = self.state[piece[0]] + self.state[piece[1]] + self.state[piece[2]]
+            if color != self.default_color[piece]:
+                changed_piece_keys.append((piece, color))
+        return changed_piece_keys
 
     def flip_moves(self,Moves):
         normalized_moves = self.normalize_move_sequence(Moves)
@@ -718,6 +734,11 @@ class MegaminxCube:
 
     def state_to_str(self):
         return reduce(lambda x,y : x+y , self.state)
+
+    def piece_display_name(self, piece_type, piece):
+        """Return a compact position-style label for a solved-state piece."""
+        labels = '-'.join(DISPLAY_FACE_NAMES[self.state_0[index]] for index in piece)
+        return f'{piece_type}-{labels}'
 
     def set_state(self,S):
         if len(S) == 12 * self.surface_num:

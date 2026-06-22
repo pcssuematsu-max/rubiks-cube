@@ -7,7 +7,12 @@ import numpy as np
 import tkinter as Tk
 
 from ai.rubiks_ai import Rubiks_3_AI
+from cto.cube import CtoCube
+from fto.cube import FtoCube
 from megaminx.cube import MegaminxCube
+from pyraminx.cube import MasterPyraminxCube, PyraminxCube
+from square1.cube import Square1Cube
+from skewb.cube import SkewbCube
 from cube.rubiks_cube import Rubiks_3
 from managers.debug_analysis import DebugAnalysisManager
 from managers.last_perms_reporter import LastPermsReporter
@@ -18,9 +23,14 @@ from managers.search_data import SearchDataManager
 from managers.solve_session import SolveSessionManager, SolveSessionState
 from model.search_result import data
 from ui.control_panel import ControlPanel
-from ui.dialogs import LpShowKeyButton, ParamEditorDialog
+from ui.cto.state_viewer import CtoStateViewer
+from ui.dialogs import AnalysisScoresDialog, DatasetInspectorDialog, LpShowKeyButton, ParamEditorDialog, ToolsDialog
 from ui.frame_config import FrameConfig
+from ui.fto.state_viewer import FtoStateViewer
 from ui.megaminx.state_viewer import MegaminxStateViewer
+from ui.pyraminx.state_viewer import PyraminxStateViewer
+from ui.square1.state_viewer import Square1StateViewer
+from ui.skewb.state_viewer import SkewbStateViewer
 from ui.viewers import (
     LogViewer,
     MoveButton,
@@ -33,16 +43,40 @@ from ui.viewers import (
 np.set_printoptions(suppress=True)
 
 
+class MoveControlProxy:
+    """Proxy used when one compact control represents many internal moves."""
+
+    def __init__(self, widgets):
+        self.widgets = widgets
+
+    def configure(self, **kwargs):
+        for widget in self.widgets:
+            widget.configure(**kwargs)
+
+
 def build_default_bootstrap_datas(cube_size):
     """既定の追加学習データ用手順列を返す。"""
     cube = Rubiks_3(size = cube_size)
     bootstrap_datas = []
 
+    bootstrap_datas += [(" x ",),
+                        (" x'",),
+                        (" x2",),
+                        (" y ",),
+                        (" y'",),
+                        (" y2",),
+                        (" z ",),
+                        (" z'",),
+                        (" z2",),
+                        ] * 16
+    
     if cube_size >= 4:
         bootstrap_datas += [("2L'","2R'",'2D2','2R ',' U ',"2R'",'2D2','2R '," U'"),
                             ("2B ","2R ","2U ","2R'"," U'","2R ","2U'","2R'"," U "),
                             ("2U ","2D ","2R2","2U ","2D'","2R2"),
                             ("2R ","2F2","2R ","2F2","2U2","2R ","2U2"),
+                            ("2U ","2D "," R2"," L2","2U ","2D'"," L2"," R2"),
+                            ("2U ","2D "," F2"," B2","2U ","2D'"," F2"," B2"),
                             ] * 20
 
     if cube_size in [5,7]:
@@ -80,7 +114,7 @@ class Frame(Tk.Frame):
         self.puzzle_type = config.puzzle_type
         self.cube_size = config.cube_size
         Tk.Frame.__init__(self,None)
-        self.master.title('Megaminx' if self.puzzle_type == 'megaminx' else 'Rubiks')
+        self.master.title(self._window_title())
         self.cube = self._create_cube(config)
 
         # Register built-in scramble candidates and initialize stage-level state.
@@ -110,22 +144,31 @@ class Frame(Tk.Frame):
             lr_hs = config.lr_hs,
             out_cs = config.out_cs,
             search3_cs = config.search3_cs,
-            pv_ratios = config.pv_ratios,
+            search2_max_frontiers = config.search2_max_frontiers,
+            search2_torch_batch_sizes = config.search2_torch_batch_sizes,
+            search2_value_loss_types = config.search2_value_loss_types,
+            search2_value_loss_margins = config.search2_value_loss_margins,
+            torch_training_devices = config.torch_training_devices,
+            use_torch = config.use_torch,
+            use_torch_predict = config.use_torch_predict,
+            use_torch_training = config.use_torch_training,
+            update_scales = config.update_scales,
             transform_idx = config.transform_idx,
             flip_inside_idx = config.flip_inside_idx,
         )
 
         # Prepare myperm lookup tables and bootstrap training data.
         self._init_myperms_metadata()
-        if self.puzzle_type == 'cube':
+        if self.puzzle_type in ['rubiks', 'cube']:
             self._append_bootstrap_datas(config.bootstrap_datas)
 
         self.grad_index = 0
-        self.grad_mode = "IG"
+        self.grad_mode = "Grad"
         self.grad_layer = "WO_V"
 
         # Construct managers first, then create the visible UI widgets.
         self._init_managers()
+        self.search_data_manager.append_bootstrap_search3_datas(config.bootstrap_search3_datas)
         control_font = self._build_control_panel()
         self._build_move_pad(control_font)
         self._build_viewers(config.cube_size)
@@ -145,7 +188,7 @@ class Frame(Tk.Frame):
         for stage_index, scramble_group in enumerate(initial_scramble_groups):
             for moves in scramble_group:
                 normalized_moves = self._normalize_move_sequence(moves)
-                self.cube.my_scrambles2[stage_index][normalized_moves[-1]].add(normalized_moves)
+                self.cube.register_scramble_sequence(stage_index, normalized_moves)
 
     def _build_default_scramble_groups(self, F2L = False, OLL = False, Centers = False, Edges = False, Cross = False):
         """cube size と mode に応じた既定の初期 scramble 候補群を作る。"""
@@ -171,6 +214,60 @@ class Frame(Tk.Frame):
                 Edges = config.Edges,
                 Cross = config.Cross,
             )
+        if self.puzzle_type == 'master_pyraminx':
+            return MasterPyraminxCube(
+                size = config.cube_size,
+                F2L = config.F2L,
+                OLL = config.OLL,
+                Centers = config.Centers,
+                Edges = config.Edges,
+                Cross = config.Cross,
+            )
+        if self.puzzle_type == 'pyraminx':
+            return PyraminxCube(
+                size = config.cube_size,
+                F2L = config.F2L,
+                OLL = config.OLL,
+                Centers = config.Centers,
+                Edges = config.Edges,
+                Cross = config.Cross,
+            )
+        if self.puzzle_type == 'skewb':
+            return SkewbCube(
+                size = config.cube_size,
+                F2L = config.F2L,
+                OLL = config.OLL,
+                Centers = config.Centers,
+                Edges = config.Edges,
+                Cross = config.Cross,
+            )
+        if self.puzzle_type == 'square1':
+            return Square1Cube(
+                size = config.cube_size,
+                F2L = config.F2L,
+                OLL = config.OLL,
+                Centers = config.Centers,
+                Edges = config.Edges,
+                Cross = config.Cross,
+            )
+        if self.puzzle_type == 'fto':
+            return FtoCube(
+                size = config.cube_size,
+                F2L = config.F2L,
+                OLL = config.OLL,
+                Centers = config.Centers,
+                Edges = config.Edges,
+                Cross = config.Cross,
+            )
+        if self.puzzle_type == 'cto':
+            return CtoCube(
+                size = config.cube_size,
+                F2L = config.F2L,
+                OLL = config.OLL,
+                Centers = config.Centers,
+                Edges = config.Edges,
+                Cross = config.Cross,
+            )
 
         return Rubiks_3(
             size = config.cube_size,
@@ -180,6 +277,23 @@ class Frame(Tk.Frame):
             Edges = config.Edges,
             Cross = config.Cross,
         )
+
+    def _window_title(self):
+        if self.puzzle_type == 'megaminx':
+            return 'Megaminx'
+        if self.puzzle_type == 'master_pyraminx':
+            return 'Master Pyraminx'
+        if self.puzzle_type == 'pyraminx':
+            return 'Pyraminx'
+        if self.puzzle_type == 'skewb':
+            return 'Skewb'
+        if self.puzzle_type == 'square1':
+            return 'Square-1'
+        if self.puzzle_type == 'fto':
+            return 'Face Turning Octahedron'
+        if self.puzzle_type == 'cto':
+            return 'Corner Turning Octahedron'
+        return 'Rubiks'
 
     def _init_stage_settings(self):
         """stage 進行と scramble mode の初期値を設定する。"""
@@ -203,10 +317,93 @@ class Frame(Tk.Frame):
             ai_search_modes = self.default_ai_search_modes()
 
         mid_size = [512] * 8
-        return [
-            Rubiks_3_AI(mid_size,cube_size = self.cube_size,Activation = 'ReLU',cube = self.cube,search_mode = search_mode)
-            for search_mode in ai_search_modes
-        ]
+        ais = []
+        for ai_index, search_mode in enumerate(ai_search_modes):
+            ais.append(Rubiks_3_AI(
+                mid_size,
+                cube_size = self.cube_size,
+                Activation = 'ReLU',
+                cube = self.cube,
+                search_mode = search_mode,
+                residual = self._ai_residual_enabled(ai_index, search_mode),
+                use_transformer_attention = self._ai_original_transformer_attention_enabled(ai_index),
+                transformer_attention_dim = self._ai_original_transformer_attention_dim(ai_index),
+                transformer_attention_token_mode = self._ai_original_transformer_attention_token_mode(ai_index),
+                piece_attention_backward_chunk_size = self._ai_original_piece_attention_backward_chunk_size(ai_index),
+                train_batch_size = self._ai_original_train_batch_size(ai_index),
+                train_state_batch_size = self._ai_original_train_state_batch_size(ai_index),
+                train_max_batches = self._ai_original_train_max_batches(ai_index),
+                train_recent_ratio = self._ai_original_train_recent_ratio(ai_index),
+                search2_value_loss_type = self._ai_search2_value_loss_type(ai_index),
+                search2_value_loss_margin = self._ai_search2_value_loss_margin(ai_index),
+            ))
+        return ais
+
+    def _ai_search2_value_loss_type(self, ai_index):
+        loss_types = getattr(self.config, 'search2_value_loss_types', None)
+        if loss_types is None:
+            return 'myloss2'
+        return loss_types[ai_index]
+
+    def _ai_search2_value_loss_margin(self, ai_index):
+        margins = getattr(self.config, 'search2_value_loss_margins', None)
+        if margins is None:
+            return 0.2
+        return float(margins[ai_index])
+
+    def _ai_residual_enabled(self, ai_index, search_mode):
+        residuals = getattr(self.config, 'residuals', None)
+        if residuals is not None:
+            return bool(residuals[ai_index])
+        return search_mode == 'search3'
+
+    def _ai_original_transformer_attention_enabled(self, ai_index):
+        flags = getattr(self.config, 'original_transformer_attention', None)
+        if flags is None:
+            return False
+        return bool(flags[ai_index])
+
+    def _ai_original_transformer_attention_dim(self, ai_index):
+        dims = getattr(self.config, 'original_transformer_attention_dims', None)
+        if dims is None:
+            return 64
+        return int(dims[ai_index])
+
+    def _ai_original_transformer_attention_token_mode(self, ai_index):
+        modes = getattr(self.config, 'original_transformer_attention_token_modes', None)
+        if modes is None:
+            return 'hidden'
+        return modes[ai_index]
+
+    def _ai_original_piece_attention_backward_chunk_size(self, ai_index):
+        sizes = getattr(self.config, 'original_piece_attention_backward_chunk_sizes', None)
+        if sizes is None:
+            return 32
+        return int(sizes[ai_index])
+
+    def _ai_original_train_batch_size(self, ai_index):
+        sizes = getattr(self.config, 'original_train_batch_sizes', None)
+        if sizes is None:
+            return None
+        return int(sizes[ai_index])
+
+    def _ai_original_train_state_batch_size(self, ai_index):
+        sizes = getattr(self.config, 'original_train_state_batch_sizes', None)
+        if sizes is None:
+            return None
+        return int(sizes[ai_index])
+
+    def _ai_original_train_max_batches(self, ai_index):
+        sizes = getattr(self.config, 'original_train_max_batches', None)
+        if sizes is None:
+            return None
+        return int(sizes[ai_index])
+
+    def _ai_original_train_recent_ratio(self, ai_index):
+        ratios = getattr(self.config, 'original_train_recent_ratios', None)
+        if ratios is None:
+            return None
+        return float(ratios[ai_index])
 
     def _init_ai_state(self, cube_size, priority_list):
         """AI 配列数に依存する基本状態と myval AI を初期化する。"""
@@ -239,18 +436,30 @@ class Frame(Tk.Frame):
         self.myval_AI.params['WM_V'] *= 0
         for i in range(self.myval_AI.params['WM_V'].shape[0]):
             self.myval_AI.params['WM_V'][i,i] = 1
+        self.myval_AI.myval = True
         self.myval_AI.mark_params_dirty()
 
     def _build_search3_progress_flags(self, search3_progress):
         """AI ごとの Search3 progress 表示フラグ列を返す。"""
         if search3_progress is None:
-            return [True] * len(self.AIs)
+            ai_modes = self.config.ai_search_modes or self.default_ai_search_modes()
+            return [True] * len(ai_modes)
         return list(search3_progress)
 
     def _default_priority_list(self):
         """puzzle type ごとの既定 priority list を返す。"""
         if self.puzzle_type == 'megaminx':
             return [['Corner', 'MidEdge']] * self.AInum
+        if self.puzzle_type == 'pyraminx':
+            return [['Corner', 'Edge', 'Center']] * self.AInum
+        if self.puzzle_type == 'master_pyraminx':
+            return [['Corner', 'Edge', 'MidEdge', 'Center']] * self.AInum
+        if self.puzzle_type == 'skewb':
+            return [['Corner', 'Center']] * self.AInum
+        if self.puzzle_type == 'fto':
+            return [['Corner', 'Edge', 'CenterA', 'CenterB']] * self.AInum
+        if self.puzzle_type == 'cto':
+            return [['Corner', 'Edge', 'Center']] * self.AInum
 
         return [[
             'CoreCenter', 'ObliqueCenter-A', 'PlusCenter-Layer2',
@@ -293,7 +502,15 @@ class Frame(Tk.Frame):
                                    lr_hs = None,
                                    out_cs = None,
                                    search3_cs = None,
-                                   pv_ratios = None,
+                                   search2_max_frontiers = None,
+                                   search2_torch_batch_sizes = None,
+                                   search2_value_loss_types = None,
+                                   search2_value_loss_margins = None,
+                                   torch_training_devices = None,
+                                   use_torch = None,
+                                   use_torch_predict = None,
+                                   use_torch_training = None,
+                                   update_scales = None,
                                    transform_idx = None,
                                    flip_inside_idx = None):
         """AI ごとの学習・探索設定と transform 設定を適用する。"""
@@ -328,11 +545,24 @@ class Frame(Tk.Frame):
                 self.AIs[i].search3_C = search3_cs[i]
             else:
                 self.AIs[i].search3_C = 0.05
+            if search2_max_frontiers is not None:
+                self.AIs[i].search2_max_frontier = int(search2_max_frontiers[i])
+            if search2_torch_batch_sizes is not None:
+                self.AIs[i].search2_torch_batch_size = int(search2_torch_batch_sizes[i])
+            if search2_value_loss_types is not None:
+                self.AIs[i].set_search2_value_loss_type(search2_value_loss_types[i])
+            if search2_value_loss_margins is not None:
+                self.AIs[i].set_search2_value_loss_margin(search2_value_loss_margins[i])
+            if torch_training_devices is not None:
+                self.AIs[i].torch_training_device = str(torch_training_devices[i])
+            if use_torch is not None:
+                self.AIs[i].use_torch = bool(use_torch[i])
+            if use_torch_predict is not None:
+                self.AIs[i].use_torch_predict = bool(use_torch_predict[i])
+            if use_torch_training is not None:
+                self.AIs[i].use_torch_training = bool(use_torch_training[i])
 
-            if pv_ratios is not None:
-                self.AIs[i].PV_ratio = pv_ratios[i]
-            else:
-                self.AIs[i].PV_ratio = 1.0
+            self._apply_update_scales(self.AIs[i], None if update_scales is None else update_scales[i])
 
         if transform_idx is not None:
             self.transform_idx = transform_idx
@@ -343,6 +573,16 @@ class Frame(Tk.Frame):
             self.flip_inside_idx = flip_inside_idx
         else:
             self.flip_inside_idx = [False] * self.AInum
+
+    def _apply_update_scales(self, ai, scales):
+        """Apply shared/policy/value update scales to a single AI."""
+        if scales is None:
+            shared_scale, policy_scale, value_scale = (1.0, 1.0, 1.0)
+        else:
+            shared_scale, policy_scale, value_scale = scales
+        ai.update_scale_shared = float(shared_scale)
+        ai.update_scale_policy = float(policy_scale)
+        ai.update_scale_value = float(value_scale)
 
     def _init_myperms_metadata(self):
         """myperms の参照用メタデータと逆引き辞書を構築する。"""
@@ -356,15 +596,22 @@ class Frame(Tk.Frame):
         """適用後 state から myperm 名を引く逆引き辞書を作る。"""
         myperms_col = {}
         for key in self.cube.myperms.keys():
-            for m in self.cube.invert_moves(self.cube.myperms[key]):
-                self.cube.make_move(m)
+            snapshot = self.cube._snapshot() if hasattr(self.cube, '_snapshot') else self.cube.state.copy()
+            try:
+                for m in self.cube.invert_moves(self.cube.myperms[key]):
+                    self.cube.make_move(m)
 
-            state_key = reduce(lambda x,y: x+y,self.cube.state)
-            if state_key not in myperms_col:
-                myperms_col[state_key] = key
+                state_key = reduce(lambda x,y: x+y,self.cube.state)
+                if state_key not in myperms_col:
+                    myperms_col[state_key] = key
 
-            for m in self.cube.myperms[key]:
-                self.cube.make_move(m)
+                for m in self.cube.myperms[key]:
+                    self.cube.make_move(m)
+            except Exception:
+                if hasattr(self.cube, '_restore'):
+                    self.cube._restore(snapshot)
+                else:
+                    self.cube.state = snapshot
 
         return myperms_col
 
@@ -374,7 +621,13 @@ class Frame(Tk.Frame):
             bootstrap_datas = build_default_bootstrap_datas(self.cube_size)
 
         for moves in bootstrap_datas:
-            d = data(moves,self.cube.invert_moves(moves),None)
+            d = data(
+                moves,
+                self.cube.invert_moves(moves),
+                None,
+                source_search_mode = 'bootstrap',
+                source_search2_value_loss_type = 'bootstrap',
+            )
             d.succeeded = True
             self.AIs[0].datas.append(d)
 
@@ -416,6 +669,10 @@ class Frame(Tk.Frame):
             pady = 1,
             command = self.hide_move_pad,
         )
+        if self.puzzle_type == 'square1':
+            self._build_square1_move_pad(font)
+            return
+
         self.close_move_pad_button.grid(row = 0,column = 0,columnspan = len(self.move_keys) // 9 + 1,sticky = 'ew')
 
         self.movebuttons = {}
@@ -423,22 +680,123 @@ class Frame(Tk.Frame):
             self.movebuttons[move_key] = MoveButton(self.move_buttons,move_key,self.cube,font,self)
             self.movebuttons[move_key].grid(row = i % 9 + 1,column = i // 9)
 
+    def _build_square1_move_pad(self, font):
+        """Square-1用の手動move入力をコンパクトに配置する。"""
+        self.close_move_pad_button.grid(row = 0,column = 0,columnspan = 4,sticky = 'ew')
+        self.square1_u_var = Tk.StringVar(value = '0')
+        self.square1_d_var = Tk.StringVar(value = '0')
+        self.square1_slash_var = Tk.IntVar(value = 1)
+
+        Tk.Label(self.move_buttons,text = 'U',font = font).grid(row = 1,column = 0,sticky = 'e')
+        Tk.Label(self.move_buttons,text = 'D',font = font).grid(row = 2,column = 0,sticky = 'e')
+        u_spin = Tk.Spinbox(self.move_buttons,from_ = -5,to = 6,width = 4,font = font,textvariable = self.square1_u_var,command = self._update_square1_manual_status)
+        d_spin = Tk.Spinbox(self.move_buttons,from_ = -5,to = 6,width = 4,font = font,textvariable = self.square1_d_var,command = self._update_square1_manual_status)
+        u_spin.grid(row = 1,column = 1,sticky = 'ew')
+        d_spin.grid(row = 2,column = 1,sticky = 'ew')
+
+        slash_check = Tk.Checkbutton(self.move_buttons,text = '/',font = font,variable = self.square1_slash_var,command = self._update_square1_manual_status)
+        slash_check.grid(row = 1,column = 2,rowspan = 2,sticky = 'nsew')
+        apply_button = Tk.Button(self.move_buttons,text = 'Apply',font = font,padx = 1,pady = 1,command = self._apply_square1_manual_move)
+        apply_button.grid(row = 1,column = 3,rowspan = 2,sticky = 'nsew')
+
+        slash_button = Tk.Button(self.move_buttons,text = '/',font = font,padx = 1,pady = 1,command = lambda:self._set_and_apply_square1_move(0, 0, True))
+        slash_button.grid(row = 3,column = 0,columnspan = 2,sticky = 'ew')
+        rotate_button = Tk.Button(self.move_buttons,text = 'Rotate only',font = font,padx = 1,pady = 1,command = lambda:self._set_square1_slash(False))
+        rotate_button.grid(row = 3,column = 2,columnspan = 2,sticky = 'ew')
+
+        self.square1_status_label = Tk.Label(self.move_buttons,text = '',font = font)
+        self.square1_status_label.grid(row = 4,column = 0,columnspan = 4,sticky = 'ew')
+        for column in range(4):
+            self.move_buttons.grid_columnconfigure(column,weight = 1)
+
+        controls = [u_spin, d_spin, slash_check, apply_button, slash_button, rotate_button]
+        proxy = MoveControlProxy(controls)
+        self.movebuttons = {move_key:proxy for move_key in self.move_keys}
+        self._update_square1_manual_status()
+
+    def _square1_manual_move_from_vars(self):
+        u = int(self.square1_u_var.get())
+        d = int(self.square1_d_var.get())
+        slash = "/" if self.square1_slash_var.get() else None
+        return self.cube.normalize_move_key((u, d, slash))
+
+    def _apply_square1_manual_move(self):
+        try:
+            move = self._square1_manual_move_from_vars()
+            if not self.cube.is_legal_move(move):
+                self._update_square1_manual_status()
+                return
+            self.cube.make_move(move)
+        except Exception as error:
+            self.square1_status_label.configure(text = str(error))
+            return
+        self.SV.set_color(self.cube.state)
+        self._update_square1_manual_status()
+
+    def _set_and_apply_square1_move(self, u, d, slash):
+        self.square1_u_var.set(str(u))
+        self.square1_d_var.set(str(d))
+        self.square1_slash_var.set(1 if slash else 0)
+        self._apply_square1_manual_move()
+
+    def _set_square1_slash(self, slash):
+        self.square1_slash_var.set(1 if slash else 0)
+        self._update_square1_manual_status()
+
+    def _update_square1_manual_status(self):
+        try:
+            move = self._square1_manual_move_from_vars()
+            status = self.cube.format_move(move)
+            if not self.cube.is_legal_move(move):
+                status += '  illegal'
+        except Exception:
+            status = 'invalid'
+        self.square1_status_label.configure(text = status)
+
     def _build_viewers(self, cube_size):
         """state/move/prob/success viewer を生成して配置する。"""
+        self._build_grad_viewer_panels()
         if self.puzzle_type == 'megaminx':
             viewer_class = MegaminxStateViewer
             self.SV = viewer_class(self)
-            self.grad_viewer_positive = viewer_class(self, mini_mode = True)
-            self.grad_viewer_negative = viewer_class(self, mini_mode = True)
+            self.grad_viewer_positive = viewer_class(self.grad_viewer_positive_panel, mini_mode = True)
+            self.grad_viewer_negative = viewer_class(self.grad_viewer_negative_panel, mini_mode = True)
+        elif self.puzzle_type in ('pyraminx', 'master_pyraminx'):
+            viewer_class = PyraminxStateViewer
+            self.SV = viewer_class(self, cube_size)
+            self.grad_viewer_positive = viewer_class(self.grad_viewer_positive_panel, cube_size, mini_mode = True)
+            self.grad_viewer_negative = viewer_class(self.grad_viewer_negative_panel, cube_size, mini_mode = True)
+        elif self.puzzle_type == 'skewb':
+            viewer_class = SkewbStateViewer
+            self.SV = viewer_class(self)
+            self.grad_viewer_positive = viewer_class(self.grad_viewer_positive_panel, mini_mode = True)
+            self.grad_viewer_negative = viewer_class(self.grad_viewer_negative_panel, mini_mode = True)
+        elif self.puzzle_type == 'square1':
+            viewer_class = Square1StateViewer
+            self.SV = viewer_class(self)
+            self.grad_viewer_positive = viewer_class(self.grad_viewer_positive_panel, mini_mode = True)
+            self.grad_viewer_negative = viewer_class(self.grad_viewer_negative_panel, mini_mode = True)
+        elif self.puzzle_type == 'fto':
+            viewer_class = FtoStateViewer
+            self.SV = viewer_class(self)
+            self.grad_viewer_positive = viewer_class(self.grad_viewer_positive_panel, mini_mode = True)
+            self.grad_viewer_negative = viewer_class(self.grad_viewer_negative_panel, mini_mode = True)
+        elif self.puzzle_type == 'cto':
+            viewer_class = CtoStateViewer
+            self.SV = viewer_class(self)
+            self.grad_viewer_positive = viewer_class(self.grad_viewer_positive_panel, mini_mode = True)
+            self.grad_viewer_negative = viewer_class(self.grad_viewer_negative_panel, mini_mode = True)
         else:
             viewer_class = StateViewer
             self.SV = viewer_class(self,cube_size)
-            self.grad_viewer_positive = viewer_class(self,cube_size,mini_mode = True)
-            self.grad_viewer_negative = viewer_class(self,cube_size,mini_mode = True)
+            self.grad_viewer_positive = viewer_class(self.grad_viewer_positive_panel,cube_size,mini_mode = True)
+            self.grad_viewer_negative = viewer_class(self.grad_viewer_negative_panel,cube_size,mini_mode = True)
 
         self.SV.grid(row = 1,column = 0,columnspan = 2)
-        self.grad_viewer_positive.grid(row = 2,column = 0)
-        self.grad_viewer_negative.grid(row = 2,column = 1)
+        self.grad_viewer_positive_panel.grid(row = 2,column = 0,sticky = 'nsew')
+        self.grad_viewer_negative_panel.grid(row = 2,column = 1,sticky = 'nsew')
+        self.grad_viewer_positive.grid(row = 1,column = 0)
+        self.grad_viewer_negative.grid(row = 1,column = 0)
         self.MV = MoveViewer(self)
         self.MV.grid(row = 1,column = 2,columnspan = 2)
 
@@ -450,6 +808,65 @@ class Frame(Tk.Frame):
         self.log_viewer = LogViewer(self)
         self.log_viewer.grid(row = 3,column = 2,columnspan = 2,sticky = 'nsew')
 
+    def _build_grad_viewer_panels(self):
+        """GradViewerをPositive/Negativeラベルとrange表示付きで配置する。"""
+        self.grad_viewer_positive_panel = Tk.Frame(self, relief = Tk.RIDGE, bd = 2, bg = '#303030')
+        self.grad_viewer_negative_panel = Tk.Frame(self, relief = Tk.RIDGE, bd = 2, bg = '#303030')
+        self.grad_viewer_positive_title = Tk.Label(
+            self.grad_viewer_positive_panel,
+            text = 'Positive / high values',
+            font = ('Century Gothic', 11, 'bold'),
+            fg = '#FFB0B0',
+            bg = '#303030',
+        )
+        self.grad_viewer_negative_title = Tk.Label(
+            self.grad_viewer_negative_panel,
+            text = 'Negative / low values',
+            font = ('Century Gothic', 11, 'bold'),
+            fg = '#B0C8FF',
+            bg = '#303030',
+        )
+        self.grad_viewer_positive_range = Tk.Label(
+            self.grad_viewer_positive_panel,
+            text = 'range: -',
+            font = ('Menlo', 9),
+            fg = '#F0F0F0',
+            bg = '#303030',
+            justify = Tk.LEFT,
+        )
+        self.grad_viewer_negative_range = Tk.Label(
+            self.grad_viewer_negative_panel,
+            text = 'range: -',
+            font = ('Menlo', 9),
+            fg = '#F0F0F0',
+            bg = '#303030',
+            justify = Tk.LEFT,
+        )
+        self.grad_viewer_info_label = Tk.Label(
+            self,
+            text = '',
+            font = ('Menlo', 9),
+            fg = '#F0F0F0',
+            bg = '#303030',
+            anchor = 'w',
+        )
+        self.grad_viewer_positive_title.grid(row = 0,column = 0,sticky = 'ew')
+        self.grad_viewer_negative_title.grid(row = 0,column = 0,sticky = 'ew')
+        self.grad_viewer_positive_range.grid(row = 2,column = 0,sticky = 'ew')
+        self.grad_viewer_negative_range.grid(row = 2,column = 0,sticky = 'ew')
+        self.grad_viewer_positive_panel.grid_columnconfigure(0, weight = 1)
+        self.grad_viewer_negative_panel.grid_columnconfigure(0, weight = 1)
+
+    def set_grad_viewer_info(self, info_text, positive_range_text, negative_range_text):
+        """GradViewerの対象AIと選択値rangeを表示する。"""
+        if hasattr(self, 'grad_viewer_info_label'):
+            self.grad_viewer_info_label.configure(text = info_text)
+            self.grad_viewer_info_label.grid(row = 3,column = 0,columnspan = 2,sticky = 'new')
+        if hasattr(self, 'grad_viewer_positive_range'):
+            self.grad_viewer_positive_range.configure(text = positive_range_text)
+        if hasattr(self, 'grad_viewer_negative_range'):
+            self.grad_viewer_negative_range.configure(text = negative_range_text)
+
     def _init_runtime_state(self):
         """UI 起動直後の runtime 状態を初期化する。"""
         self.stop = False
@@ -457,6 +874,13 @@ class Frame(Tk.Frame):
         self.last_perms_changed_number = {}
         self.solve_state.reset_session()
         self.data_len = len(self.AIs[0].datas)
+        self.data_search3_len = self.current_search3_data_len()
+
+    def current_search3_data_len(self):
+        """Return the largest Search3 dataset length among AIs."""
+        if not self.AIs:
+            return 0
+        return max(len(ai.datas_search3) for ai in self.AIs)
 
     def _display_move_keys(self, move_keys):
         """Return move labels in puzzle-specific display notation when available."""
@@ -524,20 +948,16 @@ class Frame(Tk.Frame):
             'my_solve_button',
             'loadparams_all_button',
             'saveparams_all_button',
-            'make_myperm_button',
-            'lpk_button',
+            'tools_button',
             'param_index_var',
             'param_index_entry',
             'loadparams_selected_button',
             'saveparams_selected_button',
-            'edit_params_button',
             'sum_and_var_button',
             'level_var',
             'level_entry',
             'set_level_button',
             'show_counter_button',
-            'lp_show_button',
-            'open_move_pad_button',
             'grad_index_var',
             'grad_index_entry',
             'grad_mode_var',
@@ -601,7 +1021,17 @@ class Frame(Tk.Frame):
             self.grad_mode_var.get(),
             self.grad_layer_var.get(),
         )
-        self.debug_analysis_manager.show_current_viewer(self.AI_idx,self.cube_size ** 2)
+        ai_index = self._debug_viewer_ai_index()
+        self.debug_analysis_manager.show_current_viewer(ai_index,self.cube_size ** 2)
+
+    def _debug_viewer_ai_index(self):
+        """停止中だけidx欄で指定したAIをGradViewer対象にする。"""
+        if not self.stop:
+            return self.AI_idx
+        selected_indices = self.param_manager.selected_indices(self.param_index_var.get())
+        if len(selected_indices) == 0:
+            return self.AI_idx
+        return selected_indices[0]
 
     def set_level(self,N):
         #self.load_lists()
@@ -679,6 +1109,37 @@ class Frame(Tk.Frame):
     def open_param_editor(self):
         ParamEditorDialog(self)
 
+    def open_tools_dialog(self):
+        ToolsDialog(self)
+
+    def show_analysis_scores(self, title, rows):
+        if not hasattr(self, 'analysis_scores_dialog') or not self.analysis_scores_dialog.winfo_exists():
+            self.analysis_scores_dialog = AnalysisScoresDialog(self)
+        self.analysis_scores_dialog.set_content(title, rows)
+        self.analysis_scores_dialog.deiconify()
+        self.analysis_scores_dialog.lift()
+
+    def show_analysis_text(self, title, content):
+        if not hasattr(self, 'analysis_scores_dialog') or not self.analysis_scores_dialog.winfo_exists():
+            self.analysis_scores_dialog = AnalysisScoresDialog(self)
+        self.analysis_scores_dialog.set_text_content(title, content)
+        self.analysis_scores_dialog.deiconify()
+        self.analysis_scores_dialog.lift()
+
+    def analyze_transformer_attention(self):
+        self.debug_analysis_manager.show_transformer_attention_analysis(self.AI_idx)
+
+    def analyze_transformer_embedding(self):
+        self.debug_analysis_manager.show_transformer_embedding_analysis(self.AI_idx)
+
+    def open_dataset_inspector(self):
+        if not hasattr(self, 'dataset_inspector_dialog') or not self.dataset_inspector_dialog.winfo_exists():
+            self.dataset_inspector_dialog = DatasetInspectorDialog(self)
+        else:
+            self.dataset_inspector_dialog.refresh()
+            self.dataset_inspector_dialog.deiconify()
+            self.dataset_inspector_dialog.lift()
+
 
     def my_solve(self):
         self.solve_session_manager.my_solve()
@@ -723,5 +1184,5 @@ class Frame(Tk.Frame):
     def myfunc2(self,N = 0):
         self.last_perms_reporter.myfunc2(N = N)
 
-    def myviewer(self,AInum,i,N = 1,SVD = False,Grad = False,IG = False,layer = "WO_V"):
-        self.debug_analysis_manager.myviewer(AInum,i,N = N,SVD = SVD,Grad = Grad,IG = IG,layer = layer)
+    def myviewer(self,AInum,i,N = 1,SVD = False,Grad = False,IG = False,Contrast = False,Occ = False,PieceOcc = False,PolicyOcc = False,PiecePolicyOcc = False,AttnIn = False,AttnOut = False,AttnCentral = False,EmbNorm = False,EmbPC1 = False,layer = "WO_V"):
+        self.debug_analysis_manager.myviewer(AInum,i,N = N,SVD = SVD,Grad = Grad,IG = IG,Contrast = Contrast,Occ = Occ,PieceOcc = PieceOcc,PolicyOcc = PolicyOcc,PiecePolicyOcc = PiecePolicyOcc,AttnIn = AttnIn,AttnOut = AttnOut,AttnCentral = AttnCentral,EmbNorm = EmbNorm,EmbPC1 = EmbPC1,layer = layer)

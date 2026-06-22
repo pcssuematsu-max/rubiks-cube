@@ -8,7 +8,7 @@ class ControlPanel(Tk.Frame):
     def __init__(self,master,frame):
         Tk.Frame.__init__(self,master,relief = Tk.RIDGE,bd = 4)
         self.frame = frame
-        self.font = ('Century Gothic',14,'bold')
+        self.font = ('Century Gothic',12,'bold')
         self._build_buttons()
         self._configure_columns()
 
@@ -26,9 +26,7 @@ class ControlPanel(Tk.Frame):
         self.my_solve_button = self._create_button('start solving', self.frame.my_solve, row = 0, column = 2, columnspan = 2)
         self.loadparams_all_button = self._create_button('loadparams all', self.frame.loadparams_all, row = 0, column = 4)
         self.saveparams_all_button = self._create_button('saveparams all', self.frame.saveparams_all, row = 0, column = 5)
-        self.make_myperm_button = self._create_button('make myperm', self.frame.make_myperm, row = 0, column = 6)
-        self.lpk_button = self._create_button('lpk', self.frame.lpk, row = 0, column = 7)
-        self.lp_show_button = self._create_button('lp show', self.frame.lp_show_by_button, row = 0, column = 8)
+        self.tools_button = self._create_button('tools', self.frame.open_tools_dialog, row = 0, column = 6, columnspan = 2)
 
     def _build_param_controls(self):
         """AI index 指定と param 入出力まわりの入力欄を配置する。"""
@@ -37,8 +35,7 @@ class ControlPanel(Tk.Frame):
         self.param_index_entry = self._create_entry(self.param_index_var, row = 1, column = 1)
         self.loadparams_selected_button = self._create_button('loadparams sel', self.frame.loadparams_selected, row = 1, column = 2)
         self.saveparams_selected_button = self._create_button('saveparams sel', self.frame.saveparams_selected, row = 1, column = 3)
-        self.edit_params_button = self._create_button('edit params', self.frame.open_param_editor, row = 1, column = 8)
-        self.sum_and_var_button = self._create_button('sum&var', self.frame.sum_and_var_from_entry, row = 1, column = 9)
+        self.sum_and_var_button = self._create_button('sum&var', self.frame.sum_and_var_from_entry, row = 1, column = 8)
 
     def _build_level_controls(self):
         """level 指定と counter 表示まわりの操作を配置する。"""
@@ -55,12 +52,12 @@ class ControlPanel(Tk.Frame):
         self.grad_index_entry = self._create_entry(self.grad_index_var, row = 2, column = 1)
         self.grad_mode_label = self._create_label('mode', row = 2, column = 2)
         self.grad_mode_var = Tk.StringVar(value = self.frame.grad_mode)
-        self.grad_mode_menu = self._create_option_menu(self.grad_mode_var, ('W1','SVD','Grad','IG'), row = 2, column = 3)
+        self.grad_mode_menu = self._create_option_menu(self.grad_mode_var, ('W1','SVD','Grad','IG','Contrast','Occ','PieceOcc','PolicyOcc','PiecePolicyOcc','AttnIn','AttnOut','AttnCentral','EmbNorm','EmbPC1'), row = 2, column = 3)
         self.grad_layer_label = self._create_label('layer', row = 2, column = 4)
         self.grad_layer_var = Tk.StringVar(value = self.frame.grad_layer)
         self.grad_layer_entry = self._create_entry(self.grad_layer_var, row = 2, column = 5)
         self.show_debug_viewer_button = self._create_button('show viewer', self.frame.show_debug_viewer_from_entry, row = 2, column = 6, columnspan = 2)
-        self.open_move_pad_button = self._create_button('manual moves', self.frame.toggle_move_pad, row = 2, column = 8, columnspan = 2)
+        self.open_move_pad_button = None
 
     def _create_button(self, text, command, row, column, columnspan = 1):
         """共通スタイルの Button を作って grid 配置する。"""
@@ -89,6 +86,5 @@ class ControlPanel(Tk.Frame):
 
     def _configure_columns(self):
         """ControlPanel内の各列を横方向に均等に伸縮させる。"""
-        for column_index in range(10):
+        for column_index in range(9):
             self.grid_columnconfigure(column_index, weight = 1)
-

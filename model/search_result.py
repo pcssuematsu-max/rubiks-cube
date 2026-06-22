@@ -4,10 +4,25 @@
 class data:
     """Search2用の学習データを保持する。"""
 
-    def __init__(self, scramble, moves, rewards):
+    def __init__(
+        self,
+        scramble,
+        moves,
+        rewards,
+        perfect_key = None,
+        top_group = None,
+        source_ai_index = None,
+        source_search_mode = 'search2',
+        source_search2_value_loss_type = None,
+    ):
         self.scramble = scramble
         self.moves = moves
         self.rewards = rewards
+        self.perfect_key = perfect_key
+        self.top_group = top_group
+        self.source_ai_index = source_ai_index
+        self.source_search_mode = source_search_mode
+        self.source_search2_value_loss_type = source_search2_value_loss_type
         self.succeeded = False
 
 
@@ -30,6 +45,11 @@ class data_search3:
         root_value_raw=None,
         value_trace_raw=None,
         best_value_raw=None,
+        perfect_key=None,
+        top_group=None,
+        end_reason=None,
+        source_succeeded=False,
+        solve_succeeded=False,
     ):
         self.scramble = scramble
         self.moves = moves
@@ -46,7 +66,12 @@ class data_search3:
         self.search_depth3 = 100
         self.sample_weight = sample_weight
         self.value_targets = value_targets
-        self.succeeded = False
+        self.perfect_key = perfect_key
+        self.top_group = top_group
+        self.end_reason = end_reason
+        self.source_succeeded = bool(source_succeeded)
+        self.solve_succeeded = bool(solve_succeeded)
+        self.succeeded = self.source_succeeded
 
 
 class SearchResult:

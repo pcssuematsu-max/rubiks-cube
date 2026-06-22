@@ -2,6 +2,9 @@
 
 import numpy as np
 
+def sigmoid(x):
+    clipped_x = np.clip(x,-60.0,60.0)
+    return 1.0 / (1.0 + np.exp(-clipped_x))
 
 class Q_loss:
     def __init__(self,g):
@@ -63,7 +66,32 @@ class MSE:
     
     def backward(self):
         return self.w * (self.x - self.t)
-    
+
+
+class BCEWithLogits:
+    """Binary cross entropy that takes raw logits and avoids sigmoid saturation in backprop."""
+
+    def __init__(self):
+        self.x = np.zeros(0,dtype = 'f')
+        self.t = np.zeros(0,dtype = 'f')
+        self.w = np.ones((1,0),dtype = 'f')
+        self.y = np.zeros(0,dtype = 'f')
+
+    def forward(self,x,t,w = None):
+        self.x = x
+        self.t = t
+        if w is None:
+            self.w = np.ones_like(t,dtype = 'f')
+        else:
+            self.w = w
+        clipped_x = np.clip(x,-60.0,60.0)
+        self.y = 1.0 / (1.0 + np.exp(-clipped_x))
+        loss = np.maximum(x,0.0) - x * t + np.log1p(np.exp(-np.abs(x)))
+        return np.sum(self.w * loss)
+
+    def backward(self):
+        return self.w * (self.y - self.t)
+	    
 
 class Soft_Target_Cross_Entropy:
     def __init__(self):
@@ -175,3 +203,42 @@ class Myloss:
         #    dO[:,self.Indices[i] + 1:self.Indices[i + 1]] -= self.y[:,self.Indices[i] - i:self.Indices[i + 1] - (i + 1)] * (1.0 - self.y[:,self.Indices[i] - i:self.Indices[i + 1] - (i + 1)])  
                         
         #return dO
+
+
+class MyLoss2:
+    def __init__(self, margin = 0.2):
+        self.margin = float(margin)
+        self.x = np.zeros(0,dtype = 'f')
+        self.diffs = np.zeros(0,dtype = 'f')
+        self.y = np.zeros(0,dtype = 'f')
+        self.t = np.zeros(0,dtype = 'f')
+        self.Indices = None
+
+
+    def forward(self,x,Indices):
+        self.x = x
+        self.Indices = Indices
+        self.diffs = np.zeros((1,0),dtype = 'f')
+        for i in range(len(Indices) - 1):
+            self.diffs = np.c_[self.diffs,self.x[:,Indices[i] + 1:Indices[i + 1]] - self.x[:,Indices[i]:Indices[i + 1] - 1]]
+        
+        self.y = sigmoid(self.diffs - self.margin)
+        return np.sum(np.logaddexp(0.0,self.margin - self.diffs))
+    
+
+    def backward(self):
+        D = self.y - 1.0
+        dO = np.zeros_like(self.x)
+        D_index = 0
+        for i in range(len(self.Indices) - 1):
+            start = self.Indices[i]
+            end = self.Indices[i + 1]
+            count = end - start - 1
+            if count <= 0:
+                continue
+            d = D[:,D_index:D_index + count]
+            dO[:,start:end - 1] -= d
+            dO[:,start + 1:end] += d
+            D_index += count
+
+        return dO

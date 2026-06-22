@@ -1,1 +1,1 @@
-"""AI models and training layers."""
+"""AI package."""

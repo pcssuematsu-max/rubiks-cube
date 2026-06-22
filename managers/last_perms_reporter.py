@@ -66,7 +66,7 @@ class LastPermsReporter:
             lengths = [len(moves) for moves in self.frame.last_perms[key]]
             set_dict[key] = lengths
             length_dict[key] = min(lengths)
-            value_dict[key] = min(lengths) * self.frame.last_perms_changed_number[key]
+            value_dict[key] = -min(lengths) * self.frame.last_perms_changed_number[key]
         return length_dict,set_dict,value_dict
 
     def _print_length_comparison(self, length_dict, set_dict,value_dict):
@@ -75,7 +75,7 @@ class LastPermsReporter:
         while len(value_dict) > 0:
             key,value = value_dict.popitem()
             length = length_dict[key]
-            self._print_key_length_comparison(key,length,set_dict[key],value)
+            self._print_key_length_comparison(key,length,set_dict[key],-value)
         
         print("=======Here are the last perms=======")
 
@@ -117,7 +117,9 @@ class LastPermsReporter:
 
     def _display_group_name(self, key):
         """short group key は long version に変換して表示する。"""
-        return self.frame.cube._group_name_map().get(key, key)
+        if hasattr(self.frame.cube, '_group_name_map'):
+            return self.frame.cube._group_name_map().get(key, key)
+        return key
 
     def _comparison_marker(self, current_length, registered_length):
         """手数比較の結果を表示用マーカーに変換する。"""

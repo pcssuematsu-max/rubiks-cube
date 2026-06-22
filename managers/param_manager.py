@@ -47,6 +47,9 @@ class ParamManager:
         """指定AIのパラメータ・optimizer状態をAIdatasから読み込む。"""
         ai = self.frame.AIs[index]
         data_dir = self._data_dir(index)
+        if self._load_model_file(ai, data_dir):
+            self._after_load(ai)
+            return
         for key in self._target_keys(ai, keylis):
             self._load_param_set(ai, data_dir, key)
         self._after_load(ai)
@@ -55,6 +58,8 @@ class ParamManager:
         """指定AIのパラメータ・optimizer状態をAIdatasへ保存する。"""
         ai = self.frame.AIs[index]
         data_dir = self._data_dir(index)
+        if self._save_model_file(ai, data_dir):
+            return
         for key in self._target_keys(ai, keylis):
             self._save_param_set(ai, data_dir, key)
 
@@ -135,22 +140,49 @@ class ParamManager:
         skipped_keys = set([] if keylis is None else keylis)
         return [key for key in ai.params.keys() if key not in skipped_keys]
 
+    def _save_model_file(self, ai, data_dir):
+        if not hasattr(ai, 'save_model'):
+            return False
+        return bool(ai.save_model(data_dir))
+
+    def _load_model_file(self, ai, data_dir):
+        if not hasattr(ai, 'load_model'):
+            return False
+        return bool(ai.load_model(data_dir))
+
     def _load_param_set(self, ai, data_dir, key):
         """1つのkeyについて、重み・v・hを読み込む。"""
-        ai.params[key][:] = np.load(os.path.join(data_dir,key + '.npy'))
-        ai.v[key][:] = np.load(os.path.join(data_dir,key + '_v.npy'))
-        ai.h[key][:] = np.load(os.path.join(data_dir,key + '_h.npy'))
+        param_path = os.path.join(data_dir,key + '.npy')
+        v_path = os.path.join(data_dir,key + '_v.npy')
+        h_path = os.path.join(data_dir,key + '_h.npy')
+        if not os.path.exists(param_path):
+            print(f"Skip missing param: {param_path}")
+            return
+        loaded_param = np.load(param_path)
+        if loaded_param.shape != ai.params[key].shape:
+            print(f"Skip shape mismatch param: {param_path} {loaded_param.shape} != {ai.params[key].shape}")
+            return
+        ai.params[key][:] = loaded_param
+        if os.path.exists(v_path):
+            loaded_v = np.load(v_path)
+            if loaded_v.shape == ai.v[key].shape:
+                ai.v[key][:] = loaded_v
+        if os.path.exists(h_path):
+            loaded_h = np.load(h_path)
+            if loaded_h.shape == ai.h[key].shape:
+                ai.h[key][:] = loaded_h
 
     def _save_param_set(self, ai, data_dir, key):
         """1つのkeyについて、重み・v・hを保存する。"""
+        os.makedirs(data_dir, exist_ok = True)
         np.save(os.path.join(data_dir,key + '.npy'),ai.params[key])
         np.save(os.path.join(data_dir,key + '_v.npy'),ai.v[key])
         np.save(os.path.join(data_dir,key + '_h.npy'),ai.h[key])
 
     def _after_load(self, ai):
         """読込後に完成状態の評価値と推論キャッシュを更新する。"""
-        ai.set_perfect_val()
         ai.mark_params_dirty()
+        ai.set_perfect_val()
 
     def _parse_param_index(self, array, text):
         """Entry 文字列を ndarray index に変換する。"""
@@ -176,4 +208,3 @@ class ParamManager:
                 raise ValueError('index out of range')
             indices.append(axis_index)
         return tuple(indices)
-

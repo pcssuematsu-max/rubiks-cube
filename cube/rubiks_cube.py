@@ -4,9 +4,9 @@ import random
 from functools import reduce
 
 import numpy as np
-from heapdict import heapdict
 
 from core.cube_constants import AB, R_Nums
+from core.scramble_selector import ScrambleSelector
 from cube.move_sequence_ops import MoveSequenceOps
 
 
@@ -48,6 +48,42 @@ def format_myperm_key(key):
     if isinstance(key, tuple):
         return f"{key[0]}#{key[1]:02d}"
     return key
+
+
+RUBIKS_FACE_LABEL_BY_COLOR = {
+    'W': 'U',
+    'Y': 'D',
+    'G': 'F',
+    'B': 'B',
+    'R': 'R',
+    'O': 'L',
+}
+
+RUBIKS_FACE_LABELS_BY_INDEX = ['R', 'L', 'D', 'U', 'F', 'B']
+RUBIKS_AXIS_INFO = {
+    'U': {'horizontal': ('R', 'L', True),  'vertical': ('F', 'B', True)},
+    'D': {'horizontal': ('R', 'L', True),  'vertical': ('F', 'B', False)},
+    'F': {'horizontal': ('R', 'L', True),  'vertical': ('U', 'D', False)},
+    'B': {'horizontal': ('L', 'R', True),  'vertical': ('U', 'D', False)},
+    'R': {'horizontal': ('B', 'F', True),  'vertical': ('U', 'D', False)},
+    'L': {'horizontal': ('F', 'B', True),  'vertical': ('U', 'D', False)},
+}
+RUBIKS_MIDDLE_AXIS_LABEL = {
+    frozenset({'R', 'L'}): 'M',
+    frozenset({'F', 'B'}): 'S',
+    frozenset({'U', 'D'}): 'E',
+}
+RUBIKS_AXIS_FAMILY = {
+    'R': 'RL',
+    'L': 'RL',
+    'M': 'RL',
+    'F': 'FB',
+    'B': 'FB',
+    'S': 'FB',
+    'U': 'UD',
+    'D': 'UD',
+    'E': 'UD',
+}
 
 
 def _build_group_indices_by_size():
@@ -94,6 +130,7 @@ class Rubiks_3:
         self._init_color_keys_and_groups()
         self._init_myperms_index()
         self._init_single_move_and_rotate()
+        self.scramble_selector = ScrambleSelector(self)
 
 
     def _init_move_symbol_tables(self):
@@ -521,6 +558,62 @@ class Rubiks_3:
             self.myperms2['R-Perm'] = (" U "," R2"," F "," R "," U "," R "," U'"," R'"," F'"," R "," U2"," R'"," U2"," R ")
             self.myperms2['V-Perm'] = (" R "," U'"," R "," U "," R'"," D "," R "," D'"," R "," U'"," D "," R2"," U "," R2"," D'"," R2")
 
+        
+        self.myperms2['OutCommutator00-'] = (" F "," U "," F'"," U'")
+        self.myperms2['OutCommutator01-'] = (" F "," U'"," F'"," U ")
+        self.myperms2['OutCommutator02-'] = (" F2"," U "," F'"," U'"," F'")
+        self.myperms2['OutCommutator03-'] = (" F2"," U'"," F'"," U "," F'")    
+        self.myperms2['OutCommutator04-'] = (" F'"," U "," F'"," U'"," F2")
+        self.myperms2['OutCommutator05-'] = (" F'"," U'"," F'"," U "," F2")
+
+        self.myperms2['OutCommutator06-'] = (" F2"," U "," F2"," U'") 
+        self.myperms2['OutCommutator07-'] = (" U "," F2"," U'"," F2") 
+        self.myperms2['OutCommutator08-'] = (" F "," U "," F2"," U'"," F ") 
+        self.myperms2['OutCommutator09-'] = (" F "," U'"," F2"," U "," F ")     
+        self.myperms2['OutCommutator10-'] = (" F'"," U "," F2"," U'"," F'") 
+        self.myperms2['OutCommutator11-'] = (" F'"," U'"," F2"," U "," F'") 
+
+        if self.size >= 4:
+            self.myperms2['SideCommutator00-'] = (" F ","2U "," F'","2U'")
+            self.myperms2['SideCommutator01-'] = (" F ","2U'"," F'","2U ")
+            self.myperms2['SideCommutator02-'] = ("2U "," F'","2U'"," F ")
+            self.myperms2['SideCommutator03-'] = ("2U'"," F'","2U "," F ")
+            self.myperms2['SideCommutator04-'] = (" F2","2U "," F'","2U'"," F'")
+            self.myperms2['SideCommutator05-'] = (" F2","2U'"," F'","2U "," F'")    
+            self.myperms2['SideCommutator06-'] = (" F'","2U "," F'","2U'"," F2")
+            self.myperms2['SideCommutator07-'] = (" F'","2U'"," F'","2U "," F2")
+
+            self.myperms2['SideCommutator08-'] = (" F2","2U "," F2","2U'") 
+            self.myperms2['SideCommutator09-'] = (" F2","2U'"," F2","2U ") 
+            self.myperms2['SideCommutator08-'] = ("2U "," F2","2U'"," F2") 
+            self.myperms2['SideCommutator09-'] = ("2U'"," F2","2U "," F2") 
+            self.myperms2['SideCommutator12-'] = (" F ","2U "," F2","2U'"," F ") 
+            self.myperms2['SideCommutator13-'] = (" F ","2U'"," F2","2U "," F ")     
+            self.myperms2['SideCommutator14-'] = (" F'","2U "," F2","2U'"," F'") 
+            self.myperms2['SideCommutator15-'] = (" F'","2U'"," F2","2U "," F'") 
+
+            self.myperms2['SideCommutator16-'] = (" F ","2U2"," F'","2U2")
+            self.myperms2['SideCommutator17-'] = ("2U2"," F'","2U2"," F ")
+            self.myperms2['SideCommutator18-'] = (" F2","2U2"," F'","2U2"," F'")   
+            self.myperms2['SideCommutator19-'] = (" F'","2U2"," F'","2U2"," F2")
+
+            self.myperms2['SideCommutator20-'] = (" F2","2U2"," F2","2U2") 
+            self.myperms2['SideCommutator21-'] = ("2U2"," F2","2U2"," F2") 
+            self.myperms2['SideCommutator22-'] = (" F ","2U2"," F2","2U2"," F ")    
+
+        if self.size % 2 == 1:
+            self.myperms2['MidCommutator00'] = (" F "," E "," F'"," E'")
+            self.myperms2['MidCommutator01'] = (" E "," F'"," E'"," F ")
+            self.myperms2['MidCommutator02'] = (" F2"," E "," F'"," E'"," F'")
+            self.myperms2['MidCommutator03'] = (" F'"," E "," F'"," E'"," F2")
+
+            self.myperms2['MidCommutator00'] = (" F "," E2"," F'"," E2")
+            self.myperms2['MidCommutator01'] = (" E2"," F'"," E2"," F ")
+            self.myperms2['MidCommutator02'] = (" F2"," E2"," F'"," E2"," F'")
+            self.myperms2['MidCommutator03'] = (" F'"," E2"," F'"," E2"," F2")
+
+
+
     def _register_myperms2_midedge_general(self):
         """奇数サイズ向けのMidEdge系手順を登録する。"""
         # 命名メモ:
@@ -593,7 +686,7 @@ class Rubiks_3:
             self.myperms2['MidEdge3-R-H'] = self.invert_moves(self.myperms2['MidEdge3-R-D'])
 
 
-            self.myperms2['MidEdge3-N-A'] = (" R "," M2"," U'"," M "," U2"," M'"," U'"," M2"," R'")
+            self.myperms2['MidEdge3-N-A'] = (' U ', " L'", ' E2', ' L ', " U'", " L'", ' E2', ' L ')
             self.myperms2['MidEdge3-N-B'] = (" R'", ' S2', ' R ', ' F ', " R'", ' S2', ' R ', " F'")
             self.myperms2['MidEdge3-N-C'] = (' R ', ' S ', " R'", ' F ', ' R ', " S'", " R'", " F'")
             self.myperms2['MidEdge3-N-D'] = (' E ', " L'", ' B ', " M'", ' B2', ' M ', ' B ', ' L ', " E'")
@@ -731,31 +824,8 @@ class Rubiks_3:
             
 
 
-            self.myperms2['Wing3-Parallel-K00-'] = ("2F "," L2","2F'", ' L ', '2D ', " L'", ' U2', ' L ', "2D'", " L'", ' U2', '2F '," L2","2F'")
-            self.myperms2['Wing3-Parallel-K01-'] = ("2F "," L2","2F'", ' U2', ' L ', '2D ', " L'", ' U2', ' L ', "2D'", " L'", '2F '," L2","2F'")
-            self.myperms2['Wing3-Parallel-K02-'] = ("2F "," L2","2F'", " L'", '2U ', ' L ', ' U2', " L'", "2U'", ' L ', ' U2', '2F '," L2","2F'")
-            self.myperms2['Wing3-Parallel-K03-'] = ("2F "," L2","2F'", ' U2', " L'", '2U ', ' L ', ' U2', " L'", "2U'", ' L ', '2F '," L2","2F'")
-            self.myperms2['Wing3-Parallel-K04-'] = ("2F "," R2",'2F2', ' R2', " D'", "2L'", ' D ', ' R2', " D'", '2L ', ' D ', '2F2'," R2","2F'")
-            self.myperms2['Wing3-Parallel-K05-'] = ("2F "," R2",'2F2', " D'", "2L'", ' D ', ' R2', " D'", '2L ', ' D ', ' R2', '2F2'," R2","2F'")
-            self.myperms2['Wing3-Parallel-K06-'] = ("2F "," R2",'2F2', ' R2', ' D ', "2R'", " D'", ' R2', ' D ', '2R ', " D'", '2F2'," R2","2F'")
-            self.myperms2['Wing3-Parallel-K07-'] = ("2F "," R2",'2F2', ' D ', "2R'", " D'", ' R2', ' D ', '2R ', " D'", ' R2', '2F2'," R2","2F'")
-            self.myperms2['Wing3-Parallel-K08-'] = ("2B "," R2",'2B2', ' R2', ' D ', '2L ', " D'", ' R2', ' D ', "2L'", " D'", '2B2'," R2","2B'")
-            self.myperms2['Wing3-Parallel-K09-'] = ("2B "," R2",'2B2', ' D ', '2L ', " D'", ' R2', ' D ', "2L'", " D'", ' R2', '2B2'," R2","2B'")
+            self.myperms2['Wing3-Parallel-K00-'] = ('2B2', ' R2', '2B ', ' R2', "2F'", ' L2', '2B2', ' L2', ' U2', '2F ', ' U2', '2B ')
 
-
-
-
-
-
-
-##            self.myperms2['EdgePA00-'] = ("2L'", ' U ', ' R ', " U'", '2L ', ' U ', " R'", " U'")
-##            self.myperms2['EdgePA01-'] = self.invert_moves(self.myperms2['EdgePA00-'])
-##            self.myperms2['EdgePA02-'] = ("2L'", " U'", " L'", ' U ', '2L ', " U'", ' L ', ' U ')
-##            self.myperms2['EdgePA03-'] = self.invert_moves(self.myperms2['EdgePA02-'])
-##            self.myperms2['EdgePA04-'] = ('2L ', " U'", ' R ', ' U ', "2L'", " U'", " R'", ' U ')            
-##            self.myperms2['EdgePA05-'] = self.invert_moves(self.myperms2['EdgePA04-'])
-##            self.myperms2['EdgePA06-'] = ('2L ', ' U ', " L'", " U'", "2L'", ' U ', ' L ', " U'")
-##            self.myperms2['EdgePA07-'] = self.invert_moves(self.myperms2['EdgePA06-'])
 
             self.myperms2['Wing3-Parallel2Plus1-B00-'] = (' U2', " B'", "2U'", ' B ', ' U2', " B'", '2U ', ' B ')
             self.myperms2['Wing3-Parallel2Plus1-B01-'] = self.invert_moves(self.myperms2['Wing3-Parallel2Plus1-B00-'])            
@@ -1056,84 +1126,6 @@ class Rubiks_3:
             self.myperms2['WingSwapSkewViaEdge-XK14-'] = self.simplify(self.myperms2['Wing3-SameEdgePairPlus1-K06-'] + perm_kC)
             self.myperms2['WingSwapSkewViaEdge-XK15-'] = self.simplify(self.myperms2['Wing3-SameEdgePairPlus1-K07-'] + perm_kC)
             
-            self.myperms2['WingSwapSkewViaEdge-XI00-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-I00C-'] + self.myperms2['WingSwapParallel-IX0-'])
-            self.myperms2['WingSwapSkewViaEdge-XI01-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-I01C-'] + self.myperms2['WingSwapParallel-IX1-'])
-            self.myperms2['WingSwapSkewViaEdge-XI02-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-I02C-'] + self.myperms2['WingSwapParallel-IX2-'])
-            self.myperms2['WingSwapSkewViaEdge-XI03-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-I03C-'] + self.myperms2['WingSwapParallel-IX3-'])
-            self.myperms2['WingSwapSkewViaEdge-XI04-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-I04C-'] + self.myperms2['WingSwapParallel-IX4-'])
-            self.myperms2['WingSwapSkewViaEdge-XI05-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-I05C-'] + self.myperms2['WingSwapParallel-IX5-'])
-            self.myperms2['WingSwapSkewViaEdge-XI06-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-I06C-'] + self.myperms2['WingSwapParallel-IX6-'])
-            self.myperms2['WingSwapSkewViaEdge-XI07-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-I07C-'] + self.myperms2['WingSwapParallel-IX7-'])
-
-            self.myperms2['WingSwapSkewViaEdge-XI08-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-I00C-'] + self.myperms2['WingSwapParallel-IY0-'])
-            self.myperms2['WingSwapSkewViaEdge-XI09-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-I01C-'] + self.myperms2['WingSwapParallel-IY1-'])
-            self.myperms2['WingSwapSkewViaEdge-XI10-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-I02C-'] + self.myperms2['WingSwapParallel-IY2-'])
-            self.myperms2['WingSwapSkewViaEdge-XI11-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-I03C-'] + self.myperms2['WingSwapParallel-IY3-'])
-            self.myperms2['WingSwapSkewViaEdge-XI12-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-I04C-'] + self.myperms2['WingSwapParallel-IY4-'])
-            self.myperms2['WingSwapSkewViaEdge-XI13-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-I05C-'] + self.myperms2['WingSwapParallel-IY5-'])
-            self.myperms2['WingSwapSkewViaEdge-XI14-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-I06C-'] + self.myperms2['WingSwapParallel-IY6-'])
-            self.myperms2['WingSwapSkewViaEdge-XI15-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-I07C-'] + self.myperms2['WingSwapParallel-IY7-'])
-
-            self.myperms2['WingSwapSkewViaEdge-XJ00-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-J00-'] + perm_j0)
-            self.myperms2['WingSwapSkewViaEdge-XJ01-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-J01-'] + perm_j0)
-            self.myperms2['WingSwapSkewViaEdge-XJ02-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-J02-'] + perm_j0)
-            self.myperms2['WingSwapSkewViaEdge-XJ03-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-J03-'] + perm_j0)
-            self.myperms2['WingSwapSkewViaEdge-XJ04-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-J04-'] + perm_j0)
-            self.myperms2['WingSwapSkewViaEdge-XJ05-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-J05-'] + perm_j0)
-            self.myperms2['WingSwapSkewViaEdge-XJ06-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-J06-'] + perm_j0)
-            self.myperms2['WingSwapSkewViaEdge-XJ07-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-J07-'] + perm_j0)
-
-            self.myperms2['WingSwapSkewViaEdge-XJ08-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-J00-'] + perm_j2)
-            self.myperms2['WingSwapSkewViaEdge-XJ09-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-J01-'] + perm_j2)
-            self.myperms2['WingSwapSkewViaEdge-XJ10-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-J02-'] + perm_j2)
-            self.myperms2['WingSwapSkewViaEdge-XJ11-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-J03-'] + perm_j2)
-            self.myperms2['WingSwapSkewViaEdge-XJ12-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-J04-'] + perm_j2)
-            self.myperms2['WingSwapSkewViaEdge-XJ13-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-J05-'] + perm_j2)
-            self.myperms2['WingSwapSkewViaEdge-XJ14-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-J06-'] + perm_j2)
-            self.myperms2['WingSwapSkewViaEdge-XJ15-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-J07-'] + perm_j2)
-
-
-            self.myperms2['WingSwapSkewViaEdge-XA00-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-A00-'] + self.myperms2['WingSwapParallel-A0-'])
-            self.myperms2['WingSwapSkewViaEdge-XA01-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-A01-'] + self.myperms2['WingSwapParallel-A0-'])
-            self.myperms2['WingSwapSkewViaEdge-XA02-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-A02-'] + self.myperms2['WingSwapParallel-A1-'])
-            self.myperms2['WingSwapSkewViaEdge-XA03-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-A03-'] + self.myperms2['WingSwapParallel-A1-'])
-            self.myperms2['WingSwapSkewViaEdge-XA04-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-A04-'] + self.myperms2['WingSwapParallel-A0-'])
-            self.myperms2['WingSwapSkewViaEdge-XA05-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-A05-'] + self.myperms2['WingSwapParallel-A0-'])
-            self.myperms2['WingSwapSkewViaEdge-XA06-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-A06-'] + self.myperms2['WingSwapParallel-A1-'])
-            self.myperms2['WingSwapSkewViaEdge-XA07-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-A07-'] + self.myperms2['WingSwapParallel-A1-'])
-
-            self.myperms2['WingSwapSkewViaEdge-XA08-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-A00-'] + self.myperms2['WingSwapParallel-A2-'])
-            self.myperms2['WingSwapSkewViaEdge-XA09-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-A01-'] + self.myperms2['WingSwapParallel-A2-'])
-            self.myperms2['WingSwapSkewViaEdge-XA10-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-A02-'] + self.myperms2['WingSwapParallel-A3-'])
-            self.myperms2['WingSwapSkewViaEdge-XA11-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-A03-'] + self.myperms2['WingSwapParallel-A3-'])
-            self.myperms2['WingSwapSkewViaEdge-XA12-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-A04-'] + self.myperms2['WingSwapParallel-A2-'])
-            self.myperms2['WingSwapSkewViaEdge-XA13-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-A05-'] + self.myperms2['WingSwapParallel-A2-'])
-            self.myperms2['WingSwapSkewViaEdge-XA14-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-A06-'] + self.myperms2['WingSwapParallel-A3-'])
-            self.myperms2['WingSwapSkewViaEdge-XA15-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-A07-'] + self.myperms2['WingSwapParallel-A3-'])
-
-
-            self.myperms2['WingSwapSkewViaEdge-XB00-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-B00-'] + self.myperms2['WingSwapParallel-BX00-'])
-            self.myperms2['WingSwapSkewViaEdge-XB01-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-B01-'] + self.myperms2['WingSwapParallel-BX01-'])
-            self.myperms2['WingSwapSkewViaEdge-XB02-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-B02-'] + self.myperms2['WingSwapParallel-BX02-'])
-            self.myperms2['WingSwapSkewViaEdge-XB03-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-B03-'] + self.myperms2['WingSwapParallel-BX03-'])
-            self.myperms2['WingSwapSkewViaEdge-XB04-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-B04-'] + self.myperms2['WingSwapParallel-BX04-'])
-            self.myperms2['WingSwapSkewViaEdge-XB05-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-B05-'] + self.myperms2['WingSwapParallel-BX05-'])
-            self.myperms2['WingSwapSkewViaEdge-XB06-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-B06-'] + self.myperms2['WingSwapParallel-BX06-'])
-            self.myperms2['WingSwapSkewViaEdge-XB07-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-B07-'] + self.myperms2['WingSwapParallel-BX07-'])
-
-            self.myperms2['WingSwapSkewViaEdge-XB08-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-B00B-'] + self.myperms2['WingSwapParallel-BY00-'])
-            self.myperms2['WingSwapSkewViaEdge-XB09-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-B01B-'] + self.myperms2['WingSwapParallel-BY01-'])
-            self.myperms2['WingSwapSkewViaEdge-XB10-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-B02B-'] + self.myperms2['WingSwapParallel-BY02-'])
-            self.myperms2['WingSwapSkewViaEdge-XB11-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-B03B-'] + self.myperms2['WingSwapParallel-BY03-'])
-            self.myperms2['WingSwapSkewViaEdge-XB12-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-B04B-'] + self.myperms2['WingSwapParallel-BY04-'])
-            self.myperms2['WingSwapSkewViaEdge-XB13-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-B05B-'] + self.myperms2['WingSwapParallel-BY05-'])
-            self.myperms2['WingSwapSkewViaEdge-XB14-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-B06B-'] + self.myperms2['WingSwapParallel-BY06-'])
-            self.myperms2['WingSwapSkewViaEdge-XB15-'] = self.simplify(self.myperms2['Wing3-Parallel2Plus1-B07B-'] + self.myperms2['WingSwapParallel-BY07-'])
-
-
-
-
-
             
             self.myperms2['L2NA-'] = ('2F2', ' R2', "2F'", ' U2', "2F'", ' U2', ' R2', "2F'", ' R2', '2F ', ' R2', "2F'", ' R2', '2F2', ' R2')
             self.myperms2['L2NA1-'] = ('2B2', ' D2', '2F ', ' U2', '2B ', ' L2', "2F'", ' L2', ' U2', "2B'", ' R2', '2F ', ' R2', ' D2', '2B2')
@@ -1173,18 +1165,12 @@ class Rubiks_3:
 
 
             self.myperms2['L2E-HB0-'] = ("2R'", ' F2', " D'", '2F2', ' D ', ' F2', " D'", '2F2', ' D ', ' F2', ' D ', "2B'", " D'", ' F2', ' D ', '2B ', " D'", '2R ')
-
-
             self.myperms2['L2E-XB0-'] = ("2R'", ' F2', ' D ', "2B'", " D'", ' F2', ' D ', '2B ', " D'", ' F2', " D'", '2F2', ' D ', ' F2', " D'", '2F2', ' D ', '2R ')
-          
             self.myperms2['L2E-FB0-'] = (" R "," B ","2L "," F2","2R2"," D2","2R "," D2","2R "," F2","2L2"," U2","2L "," U2"," B'"," R'")
 
             self.myperms2['L2E-XC0-'] = ('2R ', ' F2', ' D ', '2F2', " D'", ' F2', ' D ', '2F2', " D'", ' F2', " D'", '2B ', ' D ', ' F2', " D'", "2B'", ' D ', "2R'")
-
             self.myperms2['L2E-HC0-'] = ('2R ', ' F2', " D'", '2B ', ' D ', ' F2', " D'", "2B'", ' D ', ' F2', ' D ', '2F2', " D'", ' F2', ' D ', '2F2', " D'", "2R'")
-   
             self.myperms2['L2E-FC0-'] = (" U'", "2R'", ' D2', '2L2', ' B2', "2L'", ' B2', "2L'", ' D2', '2R2', ' F2', "2R'", ' F2', ' U ')
-            self.myperms2['L2E-FC1-'] = self.invert_moves(self.myperms2['L2E-FC0-'])
 
             self.myperms2['WingParallel6-A'] = ("2L ", "2R'", " D2", "2L'", "2R ", " D2")
             self.myperms2['WingParallel6-B'] = (" U'", "2L'", "2R ", ' U ', ' F2', " U'", "2L ", "2R'", ' U ', ' F2')
@@ -1230,6 +1216,10 @@ class Rubiks_3:
 
 
 
+            self.myperms2['WingParallel8-OneOpposite'] = ('2U ', ' F2', ' B2', "2U'", '2D ', ' B2', ' F2', '2U ')
+            self.myperms2['WingParallel8-OneParallel'] = ('2D ', ' F2', ' B2', "2D'", ' F2', ' B2', '2D2', ' L2', ' R2', '2U ', ' L2', ' R2', '2D ')
+            self.myperms2['WingParallel8-OneTwo'] = ("2U ","2D'"," F2"," B2","2U'","2D "," B2","2U "," F2","2U "," F2","2U "," F2","2U "," F2","2U "," F2")
+            self.myperms2['WingParallel8-TwoTwo'] = ("2U ","2D'"," F2"," B2","2U'","2D "," B2"," F2")
 
             self.myperms2['SideLA-'] = ('2L ', ' U2', "2R'", ' F2', '2R ', ' F2', ' U2', ' B2', "2R'", ' D2', '2R2', ' D2', "2R'", ' B2')
             self.myperms2['SideLB-'] = self.invert_moves(self.myperms2['SideLA-'])
@@ -1704,7 +1694,7 @@ class Rubiks_3:
                 self.myperms2['Plus-Center-U-'] = ('2R ', ' S2', '2R2', ' S2', '2R ')
                 self.myperms2['Plus-Center-V-'] = (" E'", "2B'", ' E ', '2B2', " E'", "2B'", ' E ')
                 self.myperms2['Plus-Center-TA-'] = (' M ', '2U2', " M'", '2U ', ' S ', '2U2', " S'", "2U'")
-                self.myperms2['Plus-Center-TB-'] = (" U ","2L'", " E'", '2B ', ' E ', "2B'", '2L ', '2B2', ' E2', '2B ', ' E2', '2B '," U'")
+                self.myperms2['Plus-Center-TB-'] = ('2R2', ' U ', ' S2', '2R2', ' S2', '2F2', ' M2', '2F2', ' M2', '2R2', " U'", '2R2')
                 self.myperms2['Plus-Center-TC-'] = (' S2', ' M2', ' D ', '2F2', " D'", ' S2', ' M2', ' D ', '2F2', " D'")
 
                 
@@ -2363,8 +2353,10 @@ class Rubiks_3:
 
     def _init_scramble_sets(self):
         self.my_scrambles2 = {0:{}}
+        self.my_scramble_changed_piece_keys = {0:{}}
         for key in self.move_keys:
             self.my_scrambles2[0][key] = set([])
+        self.my_scramble_changed_piece_keys[0] = {}
         self.counter = {1:{},2:{},3:{},4:{},5:{},6:{},7:{}}
 
     def _build_side_strips(self):
@@ -2658,6 +2650,7 @@ class Rubiks_3:
     def _init_empty_myperms_index(self):
         """未一致色ごとの空の myperm 候補リストを用意する。"""
         self.myperms_dict = {}
+        self.piece_color_counter = {}
         self._init_empty_center_myperms_index()
         self._init_empty_edge_myperms_index()
         self._init_empty_corner_myperms_index()
@@ -2668,6 +2661,7 @@ class Rubiks_3:
             for color in ['R','O','B','G','Y','W','X']:
                 if self.default_color[piece] != color:
                     self.myperms_dict[(piece,color)] = []
+                    self.piece_color_counter[(piece,color)] = 0
 
     def _init_empty_edge_myperms_index(self):
         """edge piece 用の逆引きキーを作る。"""
@@ -2675,6 +2669,7 @@ class Rubiks_3:
             for color in self.edge_key:
                 if self.default_color[piece] != color:
                     self.myperms_dict[(piece,color)] = []
+                    self.piece_color_counter[(piece,color)] = 0
 
     def _init_empty_corner_myperms_index(self):
         """corner piece 用の逆引きキーを作る。"""
@@ -2682,6 +2677,7 @@ class Rubiks_3:
             for color in self.corner_key:
                 if self.default_color[piece] != color:
                     self.myperms_dict[(piece,color)] = []
+                    self.piece_color_counter[(piece,color)] = 0
 
     def _register_myperms_index_entries(self):
         """各 myperm を1回ずつ適用し、変化する piece/color に登録する。"""
@@ -2734,6 +2730,57 @@ class Rubiks_3:
             if color != self.default_color[piece]:
                 self.myperms_dict[(piece,color)].append(key)
 
+
+
+    def get_chenged_pieces_keys_from_moves(self,Moves):
+        current_state = self.state.copy()
+        self.reset()
+        for m in Moves:
+            self.make_move(m)
+
+        S = self._get_changed_pieces_keys()
+        self.state = current_state
+        return S
+
+    def _get_changed_pieces_keys(self):
+        S = self._register_changed_center_keys()
+        S += self._register_changed_edge_keys()
+        S += self._register_changed_corner_keys()
+    
+        return S
+
+    def _register_changed_center_keys(self):
+        S = []
+        for piece in self.center_index:
+            color = self.state[piece[0]]
+            if color != self.default_color[piece]:
+                S.append((piece,color))
+        
+        return S
+        
+
+    def _register_changed_edge_keys(self):
+        S = []
+        for piece in self.edge_index:
+            color = self.state[piece[0]] + self.state[piece[1]]
+            if color != self.default_color[piece]:
+                S.append((piece,color))
+
+        return S
+
+    def _register_changed_corner_keys(self):
+        S = []
+        for piece in self.corner_index:
+            color = self.state[piece[0]] + self.state[piece[1]] + self.state[piece[2]]
+            if color != self.default_color[piece]:
+                S.append((piece,color))
+
+        return S
+
+
+
+
+
     def _init_myperms_order(self):
         """評価用の group 順序インデックスを作る。"""
         self.myperms_order = {}
@@ -2764,21 +2811,36 @@ class Rubiks_3:
     def create_new_set(self):
         i = len(self.my_scrambles2.keys())
         self.my_scrambles2[i] = {}
+        self.my_scramble_changed_piece_keys[i] = {}
         for k in self.my_scrambles2[0].keys():
             self.my_scrambles2[i][k] = set([]) 
+
+    def register_scramble_sequence(self, level, moves):
+        """Register one scramble sequence and cache its changed-piece keys."""
+        normalized_moves = tuple(moves)
+        self.my_scrambles2[level][normalized_moves[-1]].add(normalized_moves)
+        self.my_scramble_changed_piece_keys[level][normalized_moves] = tuple(
+            self.get_chenged_pieces_keys_from_moves(normalized_moves)
+        )
+
+    def get_registered_scramble_changed_piece_keys(self, level, moves):
+        """Return cached changed-piece keys for a registered scramble sequence."""
+        normalized_moves = tuple(moves)
+        return self.my_scramble_changed_piece_keys[level].get(normalized_moves)
 
     def make_move(self,key):
         self.state = self.state[self.move[key]]
 
 
-    def scramble(self,N,Move = None,difficult_mode = False,scramble_mode = None,flip = None,rotate = None,swap = False,add_moves = False,transform_N = None,flip_inside = None):
+    def scramble(self,N,Move = None,difficult_mode = False,scramble_mode = None,flip = None,rotate = None,swap = False,add_moves = None,transform_N = None,flip_inside = None,move_count_policy = 'prefer_rare'):
         if Move != None:
             return self._apply_moves_and_return(Move)
 
         if scramble_mode not in ['Centers','myperms','Edges','Slices','OLL']:
             return self._simple_scramble(N)
 
-        return self._guided_scramble(N,add_moves,transform_N,flip_inside)
+        move_count_policy = self.scramble_selector.resolve_move_count_policy(move_count_policy, add_moves)
+        return self._guided_scramble(N,move_count_policy,transform_N,flip_inside)
 
     def _apply_moves_and_return(self, Move):
         for m in Move:
@@ -2796,14 +2858,14 @@ class Rubiks_3:
             move_lis.append(random.choice(self.move_keys))
         return tuple(move_lis)
 
-    def _guided_scramble(self, N, add_moves, transform_N, flip_inside):
+    def _guided_scramble(self, N, move_count_policy, transform_N, flip_inside):
         move_count = self._init_scramble_count()
         transform_index = self._resolve_transform_index(transform_N)
         use_flip_inside = self._resolve_flip_inside(flip_inside)
 
         move_lis = []
         for level_index in range(N):
-            selected_moves = self._guided_scramble_moves(level_index,move_count,add_moves)
+            selected_moves = self._guided_scramble_moves(level_index,move_count,move_count_policy)
             transformed_moves = self._transform_scramble_moves(selected_moves,transform_index,use_flip_inside)
             self._append_scramble_moves(move_lis,transformed_moves)
             self._apply_scramble_moves(transformed_moves)
@@ -2811,17 +2873,10 @@ class Rubiks_3:
         return tuple(move_lis)
 
     def _init_scramble_count(self):
-        count = heapdict()
-        for key in self.move_keys:
-            count[key] = 0
-        return count
+        return self.scramble_selector.init_move_count()
 
-    def _guided_scramble_moves(self, level_index, move_count, add_moves):
-        candidates = self._collect_scramble_candidates(level_index)
-        selected_moves = self._select_scramble_candidate(candidates,move_count,add_moves,level_index)
-        self._update_count(move_count,selected_moves)
-        self._update_counter_stats(level_index,selected_moves)
-        return selected_moves
+    def _guided_scramble_moves(self, level_index, move_count, move_count_policy):
+        return self.scramble_selector.select(level_index, move_count, move_count_policy = move_count_policy)
 
     def _transform_scramble_moves(self, moves, transform_index, use_flip_inside):
         transformed_moves = self.transform(moves,transform_index)
@@ -2851,69 +2906,33 @@ class Rubiks_3:
         return bool(random.randint(0,1))
 
     def _collect_scramble_candidates(self, level_index):
-        move_keys = sorted(self.move_keys,key = lambda key:len(self.my_scrambles2[1][key]))
-        candidates = []
-        for key in move_keys:
-            candidates += list(self.my_scrambles2[level_index][key])
-        return candidates
+        level_index = self.scramble_selector.resolve_level(level_index)
+        return self.scramble_selector.collect_candidates(level_index)
 
-    def _select_scramble_candidate(self, candidates, Count, add_moves, level_index):
-        if add_moves:
-            return self._select_candidate_max(candidates,Count,level_index)
-        return self._select_candidate_min(candidates,Count,level_index)
+    def _select_scramble_candidate(self, candidates, Count, move_count_policy, level_index):
+        if move_count_policy == 'prefer_frequent':
+            return self.scramble_selector._select_candidate_max(candidates, Count, level_index)
+        return self.scramble_selector._select_candidate_min(candidates, Count, level_index)
 
     def _select_candidate_max(self, candidates, Count, level_index):
-        top_V = -1
-        top_V2 = 0
-        M = ()
-        for s in candidates:
-            V = 0
-            for m in s:
-                V += Count[m]
-            if level_index == 0:
-                V2 = random.uniform(0,1)
-            else:
-                if s not in self.counter[level_index]:
-                    V2 = 0
-                else:
-                    V2 = self.counter[level_index][s]
-            if top_V < V or (top_V == V and top_V2 > V2):
-                top_V = V
-                top_V2 = V2
-                M = s
-        return M
+        return self.scramble_selector._select_candidate_max(candidates, Count, level_index)
 
     def _select_candidate_min(self, candidates, Count, level_index):
-        top_V = 1.0e+8
-        top_V2 = 0
-        M = ()
-        for s in candidates:
-            V = 0
-            for m in s:
-                V += Count[m]
-            if level_index == 0:
-                V2 = random.uniform(0,1)
-            else:
-                if s not in self.counter[level_index]:
-                    V2 = 0
-                else:
-                    V2 = self.counter[level_index][s]
-            if top_V > V or (top_V == V and top_V2 > V2):
-                top_V = V
-                top_V2 = V2
-                M = s
-        return M
+        return self.scramble_selector._select_candidate_min(candidates, Count, level_index)
+
+    def _evaluate_piece_color_value(self,changed_piece_keys):
+        if not changed_piece_keys:
+            return 0
+        return sum(self.piece_color_counter[key] for key in changed_piece_keys)
+
+    def _update_piece_color_counter(self,changed_piece_keys):
+        self.scramble_selector.update_piece_color_counter(changed_piece_keys)
 
     def _update_count(self, Count, M):
-        for m in M:
-            Count[m] += 1
+        self.scramble_selector.update_count(Count, M)
 
     def _update_counter_stats(self, level_index, M):
-        if level_index != 0 and level_index < 8:
-            if M not in self.counter[level_index]:
-                self.counter[level_index][M] = 1
-            else:
-                self.counter[level_index][M] += 1
+        self.scramble_selector.update_counter_stats(level_index, M)
 
     def swap_2_3(self,move):
         if move[0] == "2":
@@ -3087,3 +3106,72 @@ class Rubiks_3:
     def make_transformations(self,s,Moves):
         """全ての対称変換について、scramble列とmove列の組を作る。"""
         return self.move_ops.make_transformations(s,Moves)
+
+    def piece_display_name(self, piece_type, piece):
+        """Return a compact position-style label for a solved-state piece."""
+        if piece_type == 'Center' and len(piece) == 1:
+            return self._center_display_name(piece[0])
+        if piece_type == 'Edge' and len(piece) == 2:
+            return self._edge_display_name(piece)
+        labels = ','.join(RUBIKS_FACE_LABEL_BY_COLOR[self.state_0[index]] for index in piece)
+        return f'{piece_type}-({labels})'
+
+    def _center_display_name(self, index):
+        face_label, row_index, col_index = self._index_to_face_row_col(index)
+        horizontal_label = self._coordinate_axis_label(face_label, col_index, axis = 'horizontal')
+        vertical_label = self._coordinate_axis_label(face_label, row_index, axis = 'vertical')
+        return f'Center-({face_label},{horizontal_label},{vertical_label})'
+
+    def _edge_display_name(self, piece):
+        face_labels = [RUBIKS_FACE_LABEL_BY_COLOR[self.state_0[index]] for index in piece]
+        axis_label = self._edge_axis_label(piece)
+        return f'Edge-({face_labels[0]},{face_labels[1]},{axis_label})'
+
+    def _edge_axis_label(self, piece):
+        face_labels = [RUBIKS_FACE_LABEL_BY_COLOR[self.state_0[index]] for index in piece]
+        incident_families = {self._axis_family(face_label) for face_label in face_labels}
+        candidates = []
+        for index in piece:
+            face_label, row_index, col_index = self._index_to_face_row_col(index)
+            if col_index not in (0, self.size - 1):
+                label = self._coordinate_axis_label(face_label, col_index, axis = 'horizontal')
+                if self._axis_family(label) not in incident_families:
+                    candidates.append(label)
+            if row_index not in (0, self.size - 1):
+                label = self._coordinate_axis_label(face_label, row_index, axis = 'vertical')
+                if self._axis_family(label) not in incident_families:
+                    candidates.append(label)
+        if candidates:
+            return candidates[0]
+        return '?'
+
+    def _index_to_face_row_col(self, index):
+        face_color = self.state_0[index]
+        face_label = RUBIKS_FACE_LABEL_BY_COLOR[face_color]
+        row_index, col_index = np.argwhere(self.Nums[face_color] == index)[0]
+        return face_label, int(row_index), int(col_index)
+
+    def _coordinate_axis_label(self, face_label, coordinate, axis):
+        positive_label, negative_label, toward_positive = RUBIKS_AXIS_INFO[face_label][axis]
+        if toward_positive:
+            positive_distance = self.size - coordinate
+            negative_distance = coordinate + 1
+        else:
+            positive_distance = coordinate + 1
+            negative_distance = self.size - coordinate
+
+        axis_pair = frozenset({positive_label, negative_label})
+        if positive_distance == negative_distance and axis_pair in RUBIKS_MIDDLE_AXIS_LABEL:
+            return RUBIKS_MIDDLE_AXIS_LABEL[axis_pair]
+        if positive_distance < negative_distance:
+            return self._format_axis_distance(positive_label, positive_distance)
+        return self._format_axis_distance(negative_label, negative_distance)
+
+    def _format_axis_distance(self, axis_label, distance):
+        if distance <= 1:
+            return axis_label
+        return f'{distance}{axis_label}'
+
+    def _axis_family(self, label):
+        axis_label = label[-1]
+        return RUBIKS_AXIS_FAMILY[axis_label]
